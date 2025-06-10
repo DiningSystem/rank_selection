@@ -55,3 +55,23 @@ Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
 bash scripts/cr_merge_eval.sh
 ```
+
+## Citation
+
+If you use our work, please cite our paper:
+
+```
+@article{singhal2025abba,
+  title={ABBA: Highly Expressive Hadamard Product Adaptation for Large Language Models},
+  author={Singhal, Raghav and Ponkshe, Kaustubh and Vartak, Rohit and Vepakomma, Praneeth},
+  journal={arXiv preprint arXiv:2505.14238},
+  year={2025}
+}
+
+@article{ponkshe2024initialization,
+  title={Initialization using update approximation is a silver bullet for extremely efficient low-rank fine-tuning},
+  author={Ponkshe, Kaustubh and Singhal, Raghav and Gorbunov, Eduard and Tumanov, Alexey and Horvath, Samuel and Vepakomma, Praneeth},
+  journal={arXiv preprint arXiv:2411.19557},
+  year={2024}
+}
+```
