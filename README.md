@@ -58,7 +58,7 @@ bash scripts/cr_merge_eval.sh
 
 ## Citation
 
-If you use our work, please cite our paper:
+If you use our work, please cite us:
 
 ```
 @article{singhal2025abba,
