@@ -161,6 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--hf_preload", action="store_true", help="Pre-download full model snapshot before from_pretrained")
     parser.add_argument("--hf_download_workers", type=int, default=16, help="Number of workers for snapshot pre-download")
     parser.add_argument("--hf_parallel_loading_workers", type=int, default=8, help="Number of workers for parallel HF loading")
+    parser.add_argument("--hf_prefer_safetensors", action="store_true", help="Prefer safetensors and skip .bin/.pth files during preload when possible")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha value")
