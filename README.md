@@ -33,6 +33,8 @@ You can also set a persistent cache location and reuse local files:
 python train_arithmetic.py \
   --model mistralai/Mistral-7B-v0.1 \
   --hf_fast_download \
+  --hf_preload \
+  --hf_download_workers 16 \
   --hf_cache_dir /path/to/hf-cache \
   --hf_local_files_only
 ```

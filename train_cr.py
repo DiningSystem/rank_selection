@@ -158,6 +158,8 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="meta-llama/Llama-3.2-3B", help="Model name")
     parser.add_argument("--hf_cache_dir", type=str, default=None, help="HF cache directory for model/tokenizer weights")
     parser.add_argument("--hf_fast_download", action="store_true", help="Enable accelerated HF Hub download and parallel loading")
+    parser.add_argument("--hf_preload", action="store_true", help="Pre-download full model snapshot before from_pretrained")
+    parser.add_argument("--hf_download_workers", type=int, default=16, help="Number of workers for snapshot pre-download")
     parser.add_argument("--hf_parallel_loading_workers", type=int, default=8, help="Number of workers for parallel HF loading")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")

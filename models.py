@@ -28,6 +28,59 @@ from copy import deepcopy
 from tqdm import tqdm
 
 from peft.utils import _get_submodules
+from huggingface_hub import snapshot_download
+
+def _configure_hf_download(args):
+    if getattr(args, "hf_fast_download", False):
+        os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+        os.environ.setdefault("HF_ENABLE_PARALLEL_LOADING", "true")
+        os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+        os.environ.setdefault(
+            "HF_PARALLEL_LOADING_WORKERS",
+            str(getattr(args, "hf_parallel_loading_workers", 8)),
+        )
+
+def _resolve_model_source(args):
+    if not getattr(args, "hf_preload", False):
+        return args.model
+
+    snapshot_kwargs = {
+        "repo_id": args.model,
+        "resume_download": True,
+        "max_workers": getattr(args, "hf_download_workers", 16),
+    }
+    cache_dir = getattr(args, "hf_cache_dir", None)
+    if cache_dir:
+        snapshot_kwargs["cache_dir"] = cache_dir
+    if getattr(args, "hf_local_files_only", False):
+        snapshot_kwargs["local_files_only"] = True
+
+    return snapshot_download(**snapshot_kwargs)
+
+def _get_model_load_kwargs(args):
+    load_kwargs = {
+        "device_map": "auto",
+        "torch_dtype": torch.bfloat16,
+    }
+    cache_dir = getattr(args, "hf_cache_dir", None)
+    if cache_dir:
+        load_kwargs["cache_dir"] = cache_dir
+    if getattr(args, "hf_local_files_only", False):
+        load_kwargs["local_files_only"] = True
+    return load_kwargs
+
+def _get_tokenizer_load_kwargs(args):
+    load_kwargs = {
+        "use_fast": True,
+        "model_max_length": args.max_seq_length,
+        "padding": "max_length",
+    }
+    cache_dir = getattr(args, "hf_cache_dir", None)
+    if cache_dir:
+        load_kwargs["cache_dir"] = cache_dir
+    if getattr(args, "hf_local_files_only", False):
+        load_kwargs["local_files_only"] = True
+    return load_kwargs
 
 def _configure_hf_download(args):
     if getattr(args, "hf_fast_download", False):
@@ -65,14 +118,15 @@ def _get_tokenizer_load_kwargs(args):
 
 def create_model_tokenizer_it(args):
     _configure_hf_download(args)
+    model_source = _resolve_model_source(args)
 
     model = AutoModelForCausalLM.from_pretrained(
-        args.model,
+        model_source,
         **_get_model_load_kwargs(args),
     ) 
     
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model,
+        model_source,
         **_get_tokenizer_load_kwargs(args),
     )
 
@@ -82,9 +136,10 @@ def create_model_tokenizer_it(args):
 
 def create_model_tokenizer_cr(args):
     _configure_hf_download(args)
+    model_source = _resolve_model_source(args)
 
     model = AutoModelForCausalLM.from_pretrained(
-        args.model,
+        model_source,
         **_get_model_load_kwargs(args),
     ) 
     
@@ -92,19 +147,19 @@ def create_model_tokenizer_cr(args):
 
         if "Llama-3" in args.model:
             tokenizer = AutoTokenizer.from_pretrained(
-                args.model,
+                model_source,
                 **_get_tokenizer_load_kwargs(args),
             )
         else:
             tokenizer = LlamaTokenizer.from_pretrained(
-                args.model,
+                model_source,
                 **_get_tokenizer_load_kwargs(args),
             )
 
     else:
 
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model,
+            model_source,
             **_get_tokenizer_load_kwargs(args),
         )
 
