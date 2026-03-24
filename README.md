@@ -20,6 +20,28 @@ conda activate abba
 pip install -r requirements.txt
 ```
 
+If model download from Hugging Face is slow (for example `mistralai/Mistral-7B-v0.1`), install the optional transfer backend and use the new CLI flags:
+
+```bash
+pip install hf_transfer
+bash scripts/train_arithmetic.sh
+```
+
+You can also set a persistent cache location and reuse local files:
+
+```bash
+python train_arithmetic.py \
+  --model mistralai/Mistral-7B-v0.1 \
+  --hf_fast_download \
+  --hf_preload \
+  --hf_prefer_safetensors \
+  --hf_download_workers 16 \
+  --hf_cache_dir /path/to/hf-cache \
+  --hf_local_files_only
+```
+
+`--hf_prefer_safetensors` attempts to avoid slow `.bin` downloads by preferring safetensors files (with automatic fallback if a model repo does not provide safetensors).
+
 ## Arithmetic Reasoning
 
 To train the models, execute:
