@@ -1,4 +1,5 @@
 import torch
+import os
 from torch.utils.data import DataLoader
 from transformers import RobertaTokenizer, RobertaForSequenceClassification, AdamW
 from transformers import (
@@ -27,20 +28,89 @@ from copy import deepcopy
 from tqdm import tqdm
 
 from peft.utils import _get_submodules
+from huggingface_hub import snapshot_download
+
+def _configure_hf_download(args):
+    if getattr(args, "hf_fast_download", False):
+        os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+        os.environ.setdefault("HF_ENABLE_PARALLEL_LOADING", "true")
+        os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+        os.environ.setdefault(
+            "HF_PARALLEL_LOADING_WORKERS",
+            str(getattr(args, "hf_parallel_loading_workers", 8)),
+        )
+
+def _resolve_model_source(args):
+    if not getattr(args, "hf_preload", False):
+        return args.model
+
+    snapshot_kwargs = {
+        "repo_id": args.model,
+        "resume_download": True,
+        "max_workers": getattr(args, "hf_download_workers", 16),
+    }
+    cache_dir = getattr(args, "hf_cache_dir", None)
+    if cache_dir:
+        snapshot_kwargs["cache_dir"] = cache_dir
+    if getattr(args, "hf_local_files_only", False):
+        snapshot_kwargs["local_files_only"] = True
+
+    if getattr(args, "hf_prefer_safetensors", False):
+        snapshot_kwargs["ignore_patterns"] = ["*.bin", "*.pth"]
+        try:
+            return snapshot_download(**snapshot_kwargs)
+        except Exception:
+            snapshot_kwargs.pop("ignore_patterns", None)
+
+    return snapshot_download(**snapshot_kwargs)
+
+def _get_model_load_kwargs(args):
+    load_kwargs = {
+        "device_map": "auto",
+        "torch_dtype": torch.bfloat16,
+    }
+    cache_dir = getattr(args, "hf_cache_dir", None)
+    if cache_dir:
+        load_kwargs["cache_dir"] = cache_dir
+    if getattr(args, "hf_local_files_only", False):
+        load_kwargs["local_files_only"] = True
+    if getattr(args, "hf_prefer_safetensors", False):
+        load_kwargs["use_safetensors"] = True
+    return load_kwargs
+
+def _get_tokenizer_load_kwargs(args):
+    load_kwargs = {
+        "use_fast": True,
+        "model_max_length": args.max_seq_length,
+        "padding": "max_length",
+    }
+    cache_dir = getattr(args, "hf_cache_dir", None)
+    if cache_dir:
+        load_kwargs["cache_dir"] = cache_dir
+    if getattr(args, "hf_local_files_only", False):
+        load_kwargs["local_files_only"] = True
+    return load_kwargs
 
 def create_model_tokenizer_it(args):
+    _configure_hf_download(args)
+    model_source = _resolve_model_source(args)
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model, 
-        device_map="auto",
-        torch_dtype = torch.bfloat16
-    ) 
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_source,
+            **_get_model_load_kwargs(args),
+        )
+    except Exception:
+        fallback_kwargs = _get_model_load_kwargs(args)
+        fallback_kwargs.pop("use_safetensors", None)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_source,
+            **fallback_kwargs,
+        )
     
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model,
-        use_fast=True,
-        model_max_length=args.max_seq_length,
-        padding="max_length",
+        model_source,
+        **_get_tokenizer_load_kwargs(args),
     )
 
     tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -48,36 +118,40 @@ def create_model_tokenizer_it(args):
     return model, tokenizer
 
 def create_model_tokenizer_cr(args):
+    _configure_hf_download(args)
+    model_source = _resolve_model_source(args)
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model, 
-        device_map="auto",
-        torch_dtype = torch.bfloat16) 
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_source,
+            **_get_model_load_kwargs(args),
+        )
+    except Exception:
+        fallback_kwargs = _get_model_load_kwargs(args)
+        fallback_kwargs.pop("use_safetensors", None)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_source,
+            **fallback_kwargs,
+        )
     
     if "llama" in args.model:
 
         if "Llama-3" in args.model:
             tokenizer = AutoTokenizer.from_pretrained(
-                args.model,
-                use_fast=True,
-                model_max_length=args.max_seq_length,
-                padding="max_length",
+                model_source,
+                **_get_tokenizer_load_kwargs(args),
             )
         else:
             tokenizer = LlamaTokenizer.from_pretrained(
-                args.model,
-                use_fast=True,
-                model_max_length=args.max_seq_length,
-                padding="max_length",
+                model_source,
+                **_get_tokenizer_load_kwargs(args),
             )
 
     else:
 
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model,
-            use_fast=True,
-            model_max_length=args.max_seq_length,
-            padding="max_length",
+            model_source,
+            **_get_tokenizer_load_kwargs(args),
         )
 
     tokenizer.pad_token_id = (0)
