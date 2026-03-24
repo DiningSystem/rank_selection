@@ -5,7 +5,9 @@ MODEL="mistralai/Mistral-7B-v0.1"
 GPU_ID=0  # Specify which GPU to use
 
 # List of run directories to process; add trained adapter directories here
-RUN_DIRS=("")
+RUN_DIRS=(
+    "/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260324_060905_rank_32_lr0.001_alpha_32_train_train50000"
+)
 
 # Process each run directory
 for RUN_DIR in "${RUN_DIRS[@]}"; do
