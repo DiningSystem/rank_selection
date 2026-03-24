@@ -26,7 +26,7 @@ class ABBAConfig:
         if self.target_modules is None:
             raise ValueError("target_modules cannot be None")
 
-class ABBAConfig(nn.Module):
+class ABBALayer(nn.Module):
     """
     Implementation of the ABBA layer with support for multiple adapters.
     """
@@ -265,7 +265,7 @@ def get_adapter_state_dict(model, adapter_name):
     adapter_state_dict = {}
     
     for name, module in model.named_modules():
-        if isinstance(module, ABBAConfig) and adapter_name in module.lora_A1:
+        if isinstance(module, ABBALayer) and adapter_name in module.lora_A1:
             # Save adapter parameters
             adapter_state_dict[f"{name}.lora_A1.{adapter_name}"] = module.lora_A1[adapter_name].data.cpu()
             adapter_state_dict[f"{name}.lora_B1.{adapter_name}"] = module.lora_B1[adapter_name].data.cpu()
@@ -278,7 +278,7 @@ def get_adapter_state_dict(model, adapter_name):
 def set_adapter_state_dict(model, adapter_state_dict, adapter_name):
     """Load a specific adapter state dict"""
     for name, module in model.named_modules():
-        if isinstance(module, ABBAConfig) and adapter_name in module.lora_A1:
+        if isinstance(module, ABBALayer) and adapter_name in module.lora_A1:
             # Load adapter parameters
             key_A1 = f"{name}.lora_A1.{adapter_name}"
             key_B1 = f"{name}.lora_B1.{adapter_name}"
@@ -326,7 +326,7 @@ def apply_abba(model, config, adapter_name="default"):
             # Check if the module is a Linear layer
             if isinstance(module, nn.Linear):
                 # Create a new ABBA layer
-                abba_layer = ABBAConfig(
+                abba_layer = ABBALayer(
                     module,
                     r1=config.r1,
                     r2=config.r2,
@@ -391,7 +391,7 @@ def set_adapter(self, adapter_name):
     
     # Update all ABBA layers
     for name, module in self.named_modules():
-        if isinstance(module, ABBAConfig) and adapter_name in module.lora_A1:
+        if isinstance(module, ABBALayer) and adapter_name in module.lora_A1:
             module.set_adapter(adapter_name)
 
 
@@ -401,7 +401,7 @@ def merge_and_unload(self):
     """
     # Merge weights for all ABBA layers
     for name, module in self.named_modules():
-        if isinstance(module, ABBAConfig) and module.active_adapter == self.active_adapter:
+        if isinstance(module, ABBALayer) and module.active_adapter == self.active_adapter:
             module.merge()
     
     # Create a new model with merged weights
@@ -418,7 +418,7 @@ def merge_and_unload(self):
         module = getattr(parent, target_name)
         
         # Create a new Linear layer with merged weights
-        if isinstance(module, ABBAConfig):
+        if isinstance(module, ABBALayer):
             new_module = nn.Linear(
                 module.in_features,
                 module.out_features,
@@ -442,7 +442,7 @@ def mark_only_adapters_as_trainable(self, adapter_name):
     
     # Unfreeze only the adapter parameters
     for name, module in self.named_modules():
-        if isinstance(module, ABBAConfig) and adapter_name in module.lora_A1:
+        if isinstance(module, ABBALayer) and adapter_name in module.lora_A1:
             module.lora_A1[adapter_name].requires_grad = True
             module.lora_B1[adapter_name].requires_grad = True
             module.lora_A2[adapter_name].requires_grad = True
