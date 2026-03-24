@@ -54,7 +54,27 @@ This script will fine-tune a model on the MetaMathQA dataset. You can modify the
 
 Run the following to evaluate on GSM8K and MATH benchmarks:
 ```bash
-bash scripts/arithmetic_merge_eval.sh
+bash scripts/arithmetic_merge_eval.sh /abs/path/to/run_dir
+```
+
+`scripts/arithmetic_merge_eval.sh` now accepts one or more run directories as CLI arguments. You can pass either:
+
+- a run directory (for example `.../20260324_060905_rank_32_lr0.001_alpha_32_train_train50000`), or
+- a direct `.../final_model` directory path.
+
+Examples:
+
+```bash
+# Single run directory
+bash scripts/arithmetic_merge_eval.sh \
+  /home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260324_060905_rank_32_lr0.001_alpha_32_train_train50000
+
+# Direct final_model path
+bash scripts/arithmetic_merge_eval.sh \
+  /home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260324_060905_rank_32_lr0.001_alpha_32_train_train50000/final_model
+
+# Multiple runs
+bash scripts/arithmetic_merge_eval.sh /abs/path/to/run1 /abs/path/to/run2
 ```
 
 ## Commonsense Reasoning
