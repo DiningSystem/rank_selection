@@ -12,6 +12,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
 )
 from abba import ABBAConfig, get_abba_model
+from moe_lora import MoELoRAConfig, get_moe_lora_model
 from datasets import load_dataset
 import numpy as np
 from peft import (
@@ -189,3 +190,44 @@ def create_peft_model_cr_abba(model, args):
     model = get_abba_model(model, abba_config)
 
     return model, abba_config
+
+
+def _parse_moe_experts_config(rank_csv: str):
+    ranks = [int(rank.strip()) for rank in rank_csv.split(",") if rank.strip()]
+    return [{"rank": rank} for rank in ranks]
+
+
+def create_peft_model_it_moe_lora(model, args):
+    router_hidden_dim = args.moe_router_hidden_dim if args.moe_router_hidden_dim > 0 else None
+    moe_config = MoELoRAConfig(
+        experts_config=_parse_moe_experts_config(args.moe_expert_ranks),
+        top_k=args.moe_top_k,
+        router_hidden_dim=router_hidden_dim,
+        target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
+        freeze_base=True,
+    )
+    model = get_moe_lora_model(model, moe_config)
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    trainable_params = sum(p.requires_grad for p in model.parameters())
+    if trainable_params == 0:
+        raise RuntimeError("MoE-LoRA setup produced zero trainable parameters.")
+    return model, moe_config
+
+
+def create_peft_model_cr_moe_lora(model, args):
+    router_hidden_dim = args.moe_router_hidden_dim if args.moe_router_hidden_dim > 0 else None
+    moe_config = MoELoRAConfig(
+        experts_config=_parse_moe_experts_config(args.moe_expert_ranks),
+        top_k=args.moe_top_k,
+        router_hidden_dim=router_hidden_dim,
+        target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
+        freeze_base=True,
+    )
+    model = get_moe_lora_model(model, moe_config)
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    trainable_params = sum(p.requires_grad for p in model.parameters())
+    if trainable_params == 0:
+        raise RuntimeError("MoE-LoRA setup produced zero trainable parameters.")
+    return model, moe_config
