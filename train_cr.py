@@ -84,7 +84,12 @@ def finetune():
         )
     data_module = dict(train_dataset=train_dataset, data_collator=data_collator)
     
-    model, abba_config = create_peft_model_cr_abba(model, args)
+    if args.peft_method == "abba":
+        model, peft_config = create_peft_model_cr_abba(model, args)
+    elif args.peft_method == "moe_lora":
+        model, peft_config = create_peft_model_cr_moe_lora(model, args)
+    else:
+        raise ValueError(f"Unsupported peft_method: {args.peft_method}")
 
     param_counts = count_parameters(model, verbose=False)
 
@@ -166,6 +171,10 @@ if __name__ == "__main__":
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha value")
     parser.add_argument("--lora_dropout", type=float, default=0.05, help="LoRA dropout value")
+    parser.add_argument("--peft_method", type=str, default="abba", choices=["abba", "moe_lora"], help="PEFT method to train")
+    parser.add_argument("--moe_expert_ranks", type=str, default="4,8,16,32", help="Comma-separated MoE-LoRA expert ranks (powers of 2)")
+    parser.add_argument("--moe_top_k", type=int, default=1, help="Top-k routed experts per token for MoE-LoRA")
+    parser.add_argument("--moe_router_hidden_dim", type=int, default=0, help="Optional hidden dim for router MLP (0=linear router)")
     parser.add_argument("--batch_size", type=int, default=6, help="Batch size")
     parser.add_argument("--grad_acc_steps", type=int, default=24, help="Gradient accumulation steps")
 
