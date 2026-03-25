@@ -214,7 +214,10 @@ class MoELoRALayer(nn.Module):
                 else:
                     expert_out = expert(x_chunk)
 
+                weight_chunk = weight_chunk.to(dtype=expert_out.dtype)
                 weighted = expert_out * weight_chunk.unsqueeze(-1)
+                if weighted.dtype != delta_out.dtype:
+                    weighted = weighted.to(delta_out.dtype)
                 delta_out.index_add_(0, token_chunk, weighted)
 
             with torch.no_grad():
