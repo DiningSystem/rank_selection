@@ -174,14 +174,12 @@ class MoELoRALayer(nn.Module):
     def forward(self, x: torch.Tensor, return_aux: bool = False):
         x_2d, original_shape = self._flatten_tokens(x)
 
-        base_out = self.base(x_2d)
+        output_2d = self.base(x_2d)
 
         _, probs = self.router(x_2d)
-        self._last_router_probs = probs
+        self._last_router_probs = probs if return_aux else probs.detach()
 
         top_vals, top_idx = torch.topk(probs, k=self.top_k, dim=-1)
-
-        delta_out = torch.zeros_like(base_out)
 
         # Compute only experts selected by top-k routing.
         for expert_id, expert in enumerate(self.experts):
@@ -195,9 +193,9 @@ class MoELoRALayer(nn.Module):
 
             expert_out = expert(x_selected)
             weighted = expert_out * weights.unsqueeze(-1)
-            if weighted.dtype != delta_out.dtype:
-                weighted = weighted.to(delta_out.dtype)
-            delta_out.index_add_(0, token_positions, weighted)
+            if weighted.dtype != output_2d.dtype:
+                weighted = weighted.to(output_2d.dtype)
+            output_2d.index_add_(0, token_positions, weighted)
 
             with torch.no_grad():
                 self.expert_usage_counts[expert_id] += float(token_positions.numel())
@@ -205,7 +203,7 @@ class MoELoRALayer(nn.Module):
         with torch.no_grad():
             self.routed_token_count += float(x_2d.size(0))
 
-        y = (base_out + delta_out).reshape(*original_shape[:-1], self.d_out)
+        y = output_2d.reshape(*original_shape[:-1], self.d_out)
 
         if not return_aux:
             return y
