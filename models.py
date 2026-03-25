@@ -205,6 +205,8 @@ def create_peft_model_it_moe_lora(model, args):
         router_hidden_dim=router_hidden_dim,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
+        expert_chunk_size=args.moe_expert_chunk_size,
+        gradient_checkpoint_experts=args.moe_gradient_checkpoint_experts,
     )
     model = get_moe_lora_model(model, moe_config)
     if hasattr(model, "enable_input_require_grads"):
@@ -223,6 +225,8 @@ def create_peft_model_cr_moe_lora(model, args):
         router_hidden_dim=router_hidden_dim,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
+        expert_chunk_size=args.moe_expert_chunk_size,
+        gradient_checkpoint_experts=args.moe_gradient_checkpoint_experts,
     )
     model = get_moe_lora_model(model, moe_config)
     if hasattr(model, "enable_input_require_grads"):

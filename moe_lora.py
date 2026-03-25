@@ -6,6 +6,7 @@ from typing import Dict, Optional, Sequence, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint as checkpoint
 
 
 class LoRAExpert(nn.Module):
@@ -114,6 +115,8 @@ class MoELoRALayer(nn.Module):
         router_hidden_dim: Optional[int] = None,
         bias: bool = True,
         freeze_base: bool = True,
+        expert_chunk_size: int = 0,
+        gradient_checkpoint_experts: bool = False,
     ) -> None:
         super().__init__()
         if len(experts_config) == 0:
@@ -125,6 +128,8 @@ class MoELoRALayer(nn.Module):
         self.d_out = d_out
         self.num_experts = len(experts_config)
         self.top_k = min(top_k, self.num_experts)
+        self.expert_chunk_size = expert_chunk_size
+        self.gradient_checkpoint_experts = gradient_checkpoint_experts
 
         self.base = nn.Linear(d_in, d_out, bias=bias)
         if freeze_base:
@@ -150,6 +155,8 @@ class MoELoRALayer(nn.Module):
         top_k: int = 1,
         router_hidden_dim: Optional[int] = None,
         freeze_base: bool = True,
+        expert_chunk_size: int = 0,
+        gradient_checkpoint_experts: bool = False,
     ) -> "MoELoRALayer":
         layer = cls(
             d_in=linear.in_features,
@@ -159,6 +166,8 @@ class MoELoRALayer(nn.Module):
             router_hidden_dim=router_hidden_dim,
             bias=linear.bias is not None,
             freeze_base=freeze_base,
+            expert_chunk_size=expert_chunk_size,
+            gradient_checkpoint_experts=gradient_checkpoint_experts,
         )
         with torch.no_grad():
             layer.base.weight.copy_(linear.weight)
@@ -193,9 +202,20 @@ class MoELoRALayer(nn.Module):
             x_selected = x_2d[token_positions]
             weights = top_vals[token_positions, slot_positions]
 
-            expert_out = expert(x_selected)
-            weighted = expert_out * weights.unsqueeze(-1)
-            delta_out.index_add_(0, token_positions, weighted)
+            chunk_size = self.expert_chunk_size if self.expert_chunk_size > 0 else x_selected.size(0)
+            for start in range(0, x_selected.size(0), chunk_size):
+                end = start + chunk_size
+                x_chunk = x_selected[start:end]
+                token_chunk = token_positions[start:end]
+                weight_chunk = weights[start:end]
+
+                if self.training and self.gradient_checkpoint_experts:
+                    expert_out = checkpoint.checkpoint(expert, x_chunk, use_reentrant=False)
+                else:
+                    expert_out = expert(x_chunk)
+
+                weighted = expert_out * weight_chunk.unsqueeze(-1)
+                delta_out.index_add_(0, token_chunk, weighted)
 
             with torch.no_grad():
                 self.expert_usage_counts[expert_id] += float(token_positions.numel())
@@ -260,6 +280,8 @@ class MoELoRAConfig:
     router_hidden_dim: Optional[int] = None
     target_modules: Optional[Sequence[str]] = None
     freeze_base: bool = True
+    expert_chunk_size: int = 0
+    gradient_checkpoint_experts: bool = False
 
     def __post_init__(self) -> None:
         if not self.target_modules:
@@ -316,6 +338,8 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
                     top_k=config.top_k,
                     router_hidden_dim=config.router_hidden_dim,
                     freeze_base=config.freeze_base,
+                    expert_chunk_size=config.expert_chunk_size,
+                    gradient_checkpoint_experts=config.gradient_checkpoint_experts,
                 )
                 setattr(parent, target_name, wrapped)
                 model.adapter_layers.add(name)

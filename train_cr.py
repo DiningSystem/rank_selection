@@ -175,6 +175,8 @@ if __name__ == "__main__":
     parser.add_argument("--moe_expert_ranks", type=str, default="4,8,16,32", help="Comma-separated MoE-LoRA expert ranks (powers of 2)")
     parser.add_argument("--moe_top_k", type=int, default=1, help="Top-k routed experts per token for MoE-LoRA")
     parser.add_argument("--moe_router_hidden_dim", type=int, default=0, help="Optional hidden dim for router MLP (0=linear router)")
+    parser.add_argument("--moe_expert_chunk_size", type=int, default=0, help="Chunk size for per-expert token processing (0 disables chunking)")
+    parser.add_argument("--moe_gradient_checkpoint_experts", action="store_true", help="Enable gradient checkpointing inside MoE experts")
     parser.add_argument("--batch_size", type=int, default=6, help="Batch size")
     parser.add_argument("--grad_acc_steps", type=int, default=24, help="Gradient accumulation steps")
 
