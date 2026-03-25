@@ -197,16 +197,27 @@ def _parse_moe_experts_config(rank_csv: str):
     return [{"rank": rank} for rank in ranks]
 
 
+def _build_moe_experts_config(args):
+    # Preferred path: explicit r_max only.
+    if getattr(args, "moe_r_max", 0) > 0:
+        return [{"rank": int(args.moe_r_max)}]
+
+    # Backward-compat fallback for older configs.
+    rank_csv = getattr(args, "moe_rank_components", "") or getattr(args, "moe_expert_ranks", "")
+    if rank_csv:
+        return _parse_moe_experts_config(rank_csv)
+    raise ValueError("Set --moe_r_max (preferred) or provide rank components.")
+
+
 def create_peft_model_it_moe_lora(model, args):
     router_hidden_dim = args.moe_router_hidden_dim if args.moe_router_hidden_dim > 0 else None
     moe_config = MoELoRAConfig(
-        experts_config=_parse_moe_experts_config(args.moe_expert_ranks),
+        experts_config=_build_moe_experts_config(args),
+        r_max=args.moe_r_max if args.moe_r_max > 0 else None,
         top_k=args.moe_top_k,
         router_hidden_dim=router_hidden_dim,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
-        expert_chunk_size=args.moe_expert_chunk_size,
-        gradient_checkpoint_experts=args.moe_gradient_checkpoint_experts,
     )
     model = get_moe_lora_model(model, moe_config)
     if hasattr(model, "enable_input_require_grads"):
@@ -220,13 +231,12 @@ def create_peft_model_it_moe_lora(model, args):
 def create_peft_model_cr_moe_lora(model, args):
     router_hidden_dim = args.moe_router_hidden_dim if args.moe_router_hidden_dim > 0 else None
     moe_config = MoELoRAConfig(
-        experts_config=_parse_moe_experts_config(args.moe_expert_ranks),
+        experts_config=_build_moe_experts_config(args),
+        r_max=args.moe_r_max if args.moe_r_max > 0 else None,
         top_k=args.moe_top_k,
         router_hidden_dim=router_hidden_dim,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
-        expert_chunk_size=args.moe_expert_chunk_size,
-        gradient_checkpoint_experts=args.moe_gradient_checkpoint_experts,
     )
     model = get_moe_lora_model(model, moe_config)
     if hasattr(model, "enable_input_require_grads"):
