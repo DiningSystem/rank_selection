@@ -207,6 +207,11 @@ def create_peft_model_it_moe_lora(model, args):
         freeze_base=True,
     )
     model = get_moe_lora_model(model, moe_config)
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    trainable_params = sum(p.requires_grad for p in model.parameters())
+    if trainable_params == 0:
+        raise RuntimeError("MoE-LoRA setup produced zero trainable parameters.")
     return model, moe_config
 
 
@@ -220,4 +225,9 @@ def create_peft_model_cr_moe_lora(model, args):
         freeze_base=True,
     )
     model = get_moe_lora_model(model, moe_config)
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    trainable_params = sum(p.requires_grad for p in model.parameters())
+    if trainable_params == 0:
+        raise RuntimeError("MoE-LoRA setup produced zero trainable parameters.")
     return model, moe_config

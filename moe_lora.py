@@ -174,12 +174,14 @@ class MoELoRALayer(nn.Module):
     def forward(self, x: torch.Tensor, return_aux: bool = False):
         x_2d, original_shape = self._flatten_tokens(x)
 
-        output_2d = self.base(x_2d)
+        base_out = self.base(x_2d)
 
         _, probs = self.router(x_2d)
-        self._last_router_probs = probs if return_aux else probs.detach()
+        self._last_router_probs = probs
 
         top_vals, top_idx = torch.topk(probs, k=self.top_k, dim=-1)
+
+        delta_out = torch.zeros_like(base_out)
 
         # Compute only experts selected by top-k routing.
         for expert_id, expert in enumerate(self.experts):
@@ -193,9 +195,7 @@ class MoELoRALayer(nn.Module):
 
             expert_out = expert(x_selected)
             weighted = expert_out * weights.unsqueeze(-1)
-            if weighted.dtype != output_2d.dtype:
-                weighted = weighted.to(output_2d.dtype)
-            output_2d.index_add_(0, token_positions, weighted)
+            delta_out.index_add_(0, token_positions, weighted)
 
             with torch.no_grad():
                 self.expert_usage_counts[expert_id] += float(token_positions.numel())
@@ -203,7 +203,7 @@ class MoELoRALayer(nn.Module):
         with torch.no_grad():
             self.routed_token_count += float(x_2d.size(0))
 
-        y = output_2d.reshape(*original_shape[:-1], self.d_out)
+        y = (base_out + delta_out).reshape(*original_shape[:-1], self.d_out)
 
         if not return_aux:
             return y
@@ -300,6 +300,7 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
     model.peft_config["moe_lora"] = config
 
     target_modules = list(config.target_modules)
+    replaced_count = 0
     for name, module in model.named_modules():
         if any(target in name for target in target_modules):
             if isinstance(module, nn.Linear):
@@ -318,6 +319,13 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
                 )
                 setattr(parent, target_name, wrapped)
                 model.adapter_layers.add(name)
+                replaced_count += 1
+
+    if replaced_count == 0:
+        raise RuntimeError(
+            "No target nn.Linear modules were replaced by MoE-LoRA. "
+            "Check `target_modules` against `model.named_modules()`."
+        )
 
     model.mark_only_adapters_as_trainable = types.MethodType(mark_only_moe_lora_as_trainable, model)
     model.merge_and_unload = types.MethodType(merge_and_unload_moe_lora, model)
