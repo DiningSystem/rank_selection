@@ -1,10 +1,13 @@
 import types
+import json
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from safetensors.torch import load_file as safetensors_load_file
 
 
 class RankRouter(nn.Module):
@@ -315,6 +318,34 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
 
 def get_moe_lora_model(model: nn.Module, config: MoELoRAConfig):
     return apply_moe_lora(model, config)
+
+
+def load_moe_checkpoint_state_dict(checkpoint_dir: str) -> Dict[str, torch.Tensor]:
+    """Load sharded HF safetensors checkpoint into a single state dict."""
+    index_path = os.path.join(checkpoint_dir, "model.safetensors.index.json")
+    if not os.path.exists(index_path):
+        single_path = os.path.join(checkpoint_dir, "model.safetensors")
+        if not os.path.exists(single_path):
+            raise FileNotFoundError(f"No safetensors checkpoint found under: {checkpoint_dir}")
+        return safetensors_load_file(single_path)
+
+    with open(index_path, "r") as f:
+        index_data = json.load(f)
+    shard_files = sorted(set(index_data["weight_map"].values()))
+
+    state_dict: Dict[str, torch.Tensor] = {}
+    for shard_name in shard_files:
+        shard_path = os.path.join(checkpoint_dir, shard_name)
+        state_dict.update(safetensors_load_file(shard_path))
+    return state_dict
+
+
+def load_moe_checkpoint_flexible(model: nn.Module, checkpoint_dir: str, strict: bool = True):
+    """Load checkpoint from directory with prefix-tolerant key handling."""
+    state_dict = load_moe_checkpoint_state_dict(checkpoint_dir)
+    if hasattr(model, "load_moe_state_dict_flexible"):
+        return model.load_moe_state_dict_flexible(state_dict, strict=strict)
+    return model.load_state_dict(state_dict, strict=strict)
 
 
 if __name__ == "__main__":
