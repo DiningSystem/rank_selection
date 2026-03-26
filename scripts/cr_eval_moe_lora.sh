@@ -38,6 +38,10 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     MODEL_PATH="$RUN_DIR/final_model"
     RUN_ROOT="$RUN_DIR"
   fi
+  TOKENIZER_PATH="$MODEL_PATH"
+  if [ -d "$RUN_ROOT/tokenizer" ]; then
+    TOKENIZER_PATH="$RUN_ROOT/tokenizer"
+  fi
 
   echo "=== Evaluating MoE-LoRA run: $RUN_ROOT ==="
   if [ ! -d "$MODEL_PATH" ]; then
@@ -49,6 +53,7 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     echo "--- Dataset: $dataset ---"
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/commonsense_eval.py \
       --model "$MODEL_PATH" \
+      --tokenizer "$TOKENIZER_PATH" \
       --dataset "$dataset" \
       --data_file "data/commonsense/$dataset/test.json" \
       --batch_size 128 \
