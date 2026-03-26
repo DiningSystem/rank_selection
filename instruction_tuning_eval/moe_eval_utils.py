@@ -11,7 +11,7 @@ from moe_lora import MoELoRAConfig, get_moe_lora_model, load_moe_checkpoint_flex
 
 
 def _normalize_key(key: str) -> str:
-    return key[len("model."):] if key.startswith("model.") else key
+    return f"model.{key}" if key.startswith("layers.") else key
 
 
 def maybe_normalize_rank_moe_checkpoint(model_path: str) -> str:
