@@ -165,19 +165,21 @@ class HFMoEBackend:
         if getattr(self.tokenizer, "model_max_length", 0) < self.max_context_len:
             self.tokenizer.model_max_length = self.max_context_len
 
-    def _generate_once(self, prompts, sampling_params):
+    def _generate_once(self, prompts, sampling_params, max_input_len=None, max_new_tokens=None):
+        input_len = self.max_context_len if max_input_len is None else int(max_input_len)
         inputs = self.tokenizer(
             prompts,
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=self.max_context_len,
+            max_length=input_len,
         ).to(self.device)
         if "attention_mask" in inputs and inputs["attention_mask"].dtype is not torch.bool:
             inputs["attention_mask"] = inputs["attention_mask"].bool()
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
+        output_len = int(getattr(sampling_params, "max_tokens", 256)) if max_new_tokens is None else int(max_new_tokens)
         gen_kwargs = {
-            "max_new_tokens": int(getattr(sampling_params, "max_tokens", 256)),
+            "max_new_tokens": output_len,
             "do_sample": do_sample,
             "pad_token_id": self.tokenizer.pad_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
@@ -203,9 +205,28 @@ class HFMoEBackend:
             if self.device.startswith("cuda"):
                 torch.cuda.empty_cache()
             if len(prompts) <= 1:
+                prompt = prompts[0]
+                base_new_tokens = int(getattr(sampling_params, "max_tokens", 256))
+                fallback_new_tokens = [
+                    max(32, base_new_tokens // 2),
+                    max(16, base_new_tokens // 4),
+                ]
+                fallback_input_lens = [
+                    max(1024, self.max_context_len // 2),
+                    max(512, self.max_context_len // 4),
+                ]
+                for max_in in fallback_input_lens:
+                    for max_out in fallback_new_tokens:
+                        try:
+                            if self.device.startswith("cuda"):
+                                torch.cuda.empty_cache()
+                            return self._generate_once([prompt], sampling_params, max_input_len=max_in, max_new_tokens=max_out)
+                        except RuntimeError as nested_exc:
+                            if "out of memory" not in str(nested_exc).lower():
+                                raise
                 raise RuntimeError(
-                    "CUDA OOM while generating a single prompt in HF MoE backend. "
-                    "Reduce --max_tokens and/or input length."
+                    "CUDA OOM while generating a single prompt in HF MoE backend even after "
+                    "automatic backoff on input length and max_new_tokens."
                 ) from exc
             mid = max(1, len(prompts) // 2)
             left = self.generate(prompts[:mid], sampling_params)

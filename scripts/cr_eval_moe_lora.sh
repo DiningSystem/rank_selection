@@ -6,6 +6,8 @@
 GPU_ID=0
 BASE_MODEL=${BASE_MODEL:-""}
 PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
+VLLM_BATCH_SIZE_CR=${VLLM_BATCH_SIZE_CR:-128}
+HF_BATCH_SIZE_CR=${HF_BATCH_SIZE_CR:-16}
 RUN_DIRS=()
 
 if [ "$#" -gt 0 ]; then
@@ -96,15 +98,34 @@ PY
     EVAL_MODEL_PATH="$MODEL_PATH"
   fi
 
+  BACKEND_MODE="auto"
+  EFFECTIVE_CR_BS="$VLLM_BATCH_SIZE_CR"
+  IS_ADAPTIVE=$(python - "$EVAL_MODEL_PATH" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+index_path = os.path.join(path, "model.safetensors.index.json")
+keys = []
+if os.path.exists(index_path):
+    with open(index_path, "r") as f:
+        keys = list(json.load(f).get("weight_map", {}).keys())
+print("1" if (any(k.endswith(".A") or k.endswith(".B") for k in keys) and any(".base.weight" in k for k in keys)) else "0")
+PY
+  )
+  if [ "$IS_ADAPTIVE" = "1" ]; then
+    BACKEND_MODE="hf_moe"
+    EFFECTIVE_CR_BS="$HF_BATCH_SIZE_CR"
+    echo "=== Adaptive MoE detected: using backend=$BACKEND_MODE with reduced batch size (${EFFECTIVE_CR_BS}) ==="
+  fi
+
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/commonsense_eval.py \
       --model "$EVAL_MODEL_PATH" \
-      --backend "auto" \
+      --backend "$BACKEND_MODE" \
       --tokenizer "$TOKENIZER_PATH" \
       --dataset "$dataset" \
       --data_file "data/commonsense/$dataset/test.json" \
-      --batch_size 128 \
+      --batch_size "$EFFECTIVE_CR_BS" \
       --tensor_parallel_size 1 \
       --run_dir "$RUN_ROOT"
   done

@@ -7,6 +7,10 @@
 GPU_ID=0
 BASE_MODEL=${BASE_MODEL:-""}
 PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
+VLLM_BATCH_SIZE_GSM8K=${VLLM_BATCH_SIZE_GSM8K:-128}
+VLLM_BATCH_SIZE_MATH=${VLLM_BATCH_SIZE_MATH:-64}
+HF_BATCH_SIZE_GSM8K=${HF_BATCH_SIZE_GSM8K:-16}
+HF_BATCH_SIZE_MATH=${HF_BATCH_SIZE_MATH:-8}
 RUN_DIRS=()
 
 if [ "$#" -gt 0 ]; then
@@ -86,12 +90,42 @@ PY
     EVAL_MODEL_PATH="$MODEL_PATH"
   fi
 
+  BACKEND_MODE="auto"
+  EFFECTIVE_GSM8K_BS="$VLLM_BATCH_SIZE_GSM8K"
+  EFFECTIVE_MATH_BS="$VLLM_BATCH_SIZE_MATH"
+  IS_ADAPTIVE=$(python - "$EVAL_MODEL_PATH" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+index_path = os.path.join(path, "model.safetensors.index.json")
+keys = []
+if os.path.exists(index_path):
+    with open(index_path, "r") as f:
+        keys = list(json.load(f).get("weight_map", {}).keys())
+print("1" if (any(k.endswith(".A") or k.endswith(".B") for k in keys) and any(".base.weight" in k for k in keys)) else "0")
+PY
+  )
+  if [ "$IS_ADAPTIVE" = "1" ]; then
+    BACKEND_MODE="hf_moe"
+    EFFECTIVE_GSM8K_BS="$HF_BATCH_SIZE_GSM8K"
+    EFFECTIVE_MATH_BS="$HF_BATCH_SIZE_MATH"
+    echo "=== Adaptive MoE detected: using backend=$BACKEND_MODE with reduced batch sizes (${EFFECTIVE_GSM8K_BS}/${EFFECTIVE_MATH_BS}) ==="
+  fi
+
+  CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/gsm8k_eval.py \
+    --model "$EVAL_MODEL_PATH" \
+    --backend "$BACKEND_MODE" \
+    --tokenizer "$TOKENIZER_PATH" \
+    --data_file "data/math_eval/gsm8k_test.jsonl" \
+    --batch_size "$EFFECTIVE_GSM8K_BS" \
+    --tensor_parallel_size 1 \
+    --run_dir "$RUN_ROOT"
+
   CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/MATH_eval.py \
     --model "$EVAL_MODEL_PATH" \
-    --backend "auto" \
+    --backend "$BACKEND_MODE" \
     --tokenizer "$TOKENIZER_PATH" \
     --data_file "data/math_eval/MATH_test.jsonl" \
-    --batch_size 64 \
+    --batch_size "$EFFECTIVE_MATH_BS" \
     --tensor_parallel_size 1 \
     --run_dir "$RUN_ROOT"
     
