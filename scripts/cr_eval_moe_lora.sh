@@ -4,6 +4,8 @@
 # No adapter merge step is needed.
 
 GPU_ID=0
+BASE_MODEL=${BASE_MODEL:-""}
+PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
 RUN_DIRS=()
 
 if [ "$#" -gt 0 ]; then
@@ -42,6 +44,7 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
   if [ -d "$RUN_ROOT/tokenizer" ]; then
     TOKENIZER_PATH="$RUN_ROOT/tokenizer"
   fi
+  EVAL_MODEL_PATH="$RUN_ROOT/final_model_eval_ready"
 
   echo "=== Evaluating MoE-LoRA run: $RUN_ROOT ==="
   if [ ! -d "$MODEL_PATH" ]; then
@@ -49,10 +52,55 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     continue
   fi
 
+  NEED_PREPARE=0
+  if [ "$PREPARE_MOE_EVAL" = "always" ]; then
+    NEED_PREPARE=1
+  elif [ "$PREPARE_MOE_EVAL" = "never" ]; then
+    NEED_PREPARE=0
+  else
+    python - "$MODEL_PATH" <<'PY'
+import json
+import os
+import sys
+from safetensors.torch import load_file
+
+model_path = sys.argv[1]
+index_path = os.path.join(model_path, "model.safetensors.index.json")
+single_path = os.path.join(model_path, "model.safetensors")
+keys = set()
+if os.path.exists(index_path):
+    with open(index_path, "r") as f:
+        keys = set(json.load(f).get("weight_map", {}).keys())
+elif os.path.exists(single_path):
+    keys = set(load_file(single_path).keys())
+
+has_lm_head = "lm_head.weight" in keys
+has_embed = ("model.embed_tokens.weight" in keys) or ("embed_tokens.weight" in keys)
+has_norm = ("model.norm.weight" in keys) or ("norm.weight" in keys)
+sys.exit(0 if (has_lm_head and has_embed and has_norm) else 1)
+PY
+    if [ $? -ne 0 ]; then
+      NEED_PREPARE=1
+    fi
+  fi
+
+  if [ "$NEED_PREPARE" -eq 1 ]; then
+    echo "=== Preparing eval-ready MoE full model (base + MoE checkpoint) ==="
+    PREPARE_ARGS=(--checkpoint_dir "$MODEL_PATH" --output_dir "$EVAL_MODEL_PATH")
+    if [ -n "$BASE_MODEL" ]; then
+      PREPARE_ARGS+=(--base_model "$BASE_MODEL")
+    fi
+    python scripts/prepare_moe_eval_model.py "${PREPARE_ARGS[@]}"
+  else
+    echo "=== Checkpoint appears full; skipping base+MoE preparation ==="
+    EVAL_MODEL_PATH="$MODEL_PATH"
+  fi
+
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/commonsense_eval.py \
-      --model "$MODEL_PATH" \
+      --model "$EVAL_MODEL_PATH" \
+      --backend "auto" \
       --tokenizer "$TOKENIZER_PATH" \
       --dataset "$dataset" \
       --data_file "data/commonsense/$dataset/test.json" \
