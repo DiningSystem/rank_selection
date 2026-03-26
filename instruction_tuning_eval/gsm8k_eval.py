@@ -11,6 +11,7 @@ from grader import math_equal
 import wandb
 from tqdm.auto import tqdm
 import os
+from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 MAX_INT = sys.maxsize
 
 
@@ -72,7 +73,7 @@ def batch_data(data_list, batch_size=1):
     return batch_data
 
 
-def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1):
+def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None):
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
     gc.collect()
@@ -103,7 +104,9 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
-    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size)
+    model_path = maybe_normalize_rank_moe_checkpoint(model)
+    tokenizer_path = tokenizer if tokenizer else model_path
+    llm = LLM(model=model_path, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
     res_completions = []
     result = []
 
@@ -162,6 +165,7 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)  # merged model path
+    parser.add_argument("--tokenizer", type=str, default=None)  # tokenizer path (optional)
     parser.add_argument("--data_file", type=str, default='data/math_eval/gsm8k_test.jsonl')  # data path
     parser.add_argument("--start", type=int, default=0)  # start index
     parser.add_argument("--end", type=int, default=MAX_INT)  # end index
@@ -192,4 +196,4 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
-               batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size)
+               batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer)

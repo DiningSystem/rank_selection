@@ -8,6 +8,7 @@ import gc
 import wandb
 from tqdm.auto import tqdm
 import os
+from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 MAX_INT = sys.maxsize
 
 
@@ -69,7 +70,7 @@ def generate_prompt(instruction, input=None):
 """
 
 
-def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1):
+def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None):
     """Main evaluation function for commonsense tasks."""
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
@@ -89,7 +90,9 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
     # Setup VLLM
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens)
-    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size)
+    model_path = maybe_normalize_rank_moe_checkpoint(model)
+    tokenizer_path = tokenizer if tokenizer else model_path
+    llm = LLM(model=model_path, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
     
     res_completions = []
     result = []
@@ -148,6 +151,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True,
                       help="Path to the model")
+    parser.add_argument("--tokenizer", type=str, default=None,
+                      help="Optional tokenizer path")
     parser.add_argument("--dataset", type=str, required=True,
                       choices=["boolq", "piqa", "social_i_qa", "hellaswag",
                               "winogrande", "ARC-Challenge", "ARC-Easy", "openbookqa"],
@@ -197,5 +202,6 @@ if __name__ == "__main__":
         start=args.start,
         end=args.end,
         batch_size=args.batch_size,
-        tensor_parallel_size=args.tensor_parallel_size
+        tensor_parallel_size=args.tensor_parallel_size,
+        tokenizer=args.tokenizer
     )
