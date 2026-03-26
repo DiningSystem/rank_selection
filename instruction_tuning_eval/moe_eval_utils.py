@@ -57,3 +57,11 @@ def maybe_normalize_rank_moe_checkpoint(model_path: str) -> str:
         json.dump({"metadata": index_data.get("metadata", {}), "weight_map": new_weight_map}, f, indent=2)
 
     return fixed_dir
+
+
+def model_path_candidates(model_path: str):
+    """Candidate model paths to try for evaluation loaders."""
+    normalized = maybe_normalize_rank_moe_checkpoint(model_path)
+    if normalized == model_path:
+        return [model_path]
+    return [normalized, model_path]

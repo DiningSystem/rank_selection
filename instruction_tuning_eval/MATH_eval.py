@@ -13,7 +13,7 @@ INVALID_ANS = "[invalid]"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.append(CURRENT_DIR)
-from moe_eval_utils import maybe_normalize_rank_moe_checkpoint
+from moe_eval_utils import model_path_candidates
 
 invalid_outputs = []
 
@@ -89,9 +89,17 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=512, stop=stop_tokens)
     print('sampleing =====', sampling_params)
-    model_path = maybe_normalize_rank_moe_checkpoint(model)
-    tokenizer_path = tokenizer if tokenizer else model_path
-    llm = LLM(model=model_path, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
+    llm = None
+    init_errors = []
+    for candidate_model in model_path_candidates(model):
+        candidate_tokenizer = tokenizer if tokenizer else candidate_model
+        try:
+            llm = LLM(model=candidate_model, tokenizer=candidate_tokenizer, tensor_parallel_size=tensor_parallel_size)
+            break
+        except Exception as exc:
+            init_errors.append(f"{candidate_model}: {repr(exc)}")
+    if llm is None:
+        raise RuntimeError("Failed to initialize LLM with all model path candidates:\n" + "\n".join(init_errors))
     res_completions = []
     for idx, (prompt, prompt_answer) in enumerate(
         tqdm(zip(batch_hendrycks_math_ins, hendrycks_math_answers),
