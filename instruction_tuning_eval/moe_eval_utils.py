@@ -25,8 +25,9 @@ def maybe_normalize_rank_moe_checkpoint(model_path: str) -> str:
         return model_path
 
     fixed_dir = f"{model_path}_prefix_fixed"
+    print(f"[moe_eval_utils] Normalizing checkpoint key prefix: {model_path} -> {fixed_dir}")
     if os.path.isdir(fixed_dir):
-        return fixed_dir
+        shutil.rmtree(fixed_dir)
     os.makedirs(fixed_dir, exist_ok=True)
 
     # Copy non-safetensors files.
