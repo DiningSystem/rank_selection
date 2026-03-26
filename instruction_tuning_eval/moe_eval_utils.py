@@ -153,26 +153,38 @@ class HFMoEBackend:
         model = get_moe_lora_model(base_model, moe_config)
         load_moe_checkpoint_flexible(model, model_path, strict=False)
         self.model = model.eval().to(self.device)
+        if hasattr(self.model.config, "use_cache"):
+            self.model.config.use_cache = True
         tokenizer_source = tokenizer_path if tokenizer_path else base_model_name
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        self.max_context_len = int(getattr(self.model.config, "max_position_embeddings", 4096))
+        if getattr(self.tokenizer, "model_max_length", 0) < self.max_context_len:
+            self.tokenizer.model_max_length = self.max_context_len
 
     def generate(self, prompts, sampling_params):
-        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True).to(self.device)
+        inputs = self.tokenizer(
+            prompts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=self.max_context_len,
+        ).to(self.device)
         if "attention_mask" in inputs and inputs["attention_mask"].dtype is not torch.bool:
             inputs["attention_mask"] = inputs["attention_mask"].bool()
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
-        with torch.no_grad():
-            generated = self.model.generate(
-                **inputs,
-                max_new_tokens=int(getattr(sampling_params, "max_tokens", 256)),
-                do_sample=do_sample,
-                temperature=float(getattr(sampling_params, "temperature", 1.0)),
-                top_p=float(getattr(sampling_params, "top_p", 1.0)),
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-            )
+        gen_kwargs = {
+            "max_new_tokens": int(getattr(sampling_params, "max_tokens", 256)),
+            "do_sample": do_sample,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+        }
+        if do_sample:
+            gen_kwargs["temperature"] = float(getattr(sampling_params, "temperature", 1.0))
+            gen_kwargs["top_p"] = float(getattr(sampling_params, "top_p", 1.0))
+        with torch.inference_mode():
+            generated = self.model.generate(**inputs, **gen_kwargs)
         prompt_len = inputs["input_ids"].shape[1]
         completions = generated[:, prompt_len:]
         return self.tokenizer.batch_decode(completions, skip_special_tokens=True)
