@@ -49,6 +49,11 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     continue
   fi
 
+  echo "=== Normalizing MoE checkpoint key prefixes (layers.* -> model.layers.*) ==="
+  python scripts/normalize_moe_safetensors_prefix.py \
+    --input_dir "$MODEL_PATH" \
+    --inplace
+
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/commonsense_eval.py \
