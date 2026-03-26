@@ -136,10 +136,11 @@ class HFMoEBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None):
         base_model_name = _resolve_base_model_name(model_path)
         r_max = _infer_r_max(model_path)
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         base_model = AutoModelForCausalLM.from_pretrained(
             base_model_name,
             torch_dtype=torch.bfloat16,
-            device_map="auto",
+            device_map={"": self.device},
         )
         moe_config = MoELoRAConfig(
             experts_config=[{"rank": r_max}],
@@ -151,14 +152,14 @@ class HFMoEBackend:
         )
         model = get_moe_lora_model(base_model, moe_config)
         load_moe_checkpoint_flexible(model, model_path, strict=False)
-        self.model = model.eval()
+        self.model = model.eval().to(self.device)
         tokenizer_source = tokenizer_path if tokenizer_path else base_model_name
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
     def generate(self, prompts, sampling_params):
-        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True).to(self.model.device)
+        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True).to(self.device)
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
         with torch.no_grad():
             generated = self.model.generate(
