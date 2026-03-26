@@ -137,6 +137,8 @@ class HFMoEBackend:
         base_model_name = _resolve_base_model_name(model_path)
         r_max = _infer_r_max(model_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        if self.device.startswith("cuda"):
+            torch.backends.cuda.matmul.allow_tf32 = True
         base_model = AutoModelForCausalLM.from_pretrained(
             base_model_name,
             torch_dtype=torch.bfloat16,
@@ -163,7 +165,7 @@ class HFMoEBackend:
         if getattr(self.tokenizer, "model_max_length", 0) < self.max_context_len:
             self.tokenizer.model_max_length = self.max_context_len
 
-    def generate(self, prompts, sampling_params):
+    def _generate_once(self, prompts, sampling_params):
         inputs = self.tokenizer(
             prompts,
             return_tensors="pt",
@@ -187,7 +189,28 @@ class HFMoEBackend:
             generated = self.model.generate(**inputs, **gen_kwargs)
         prompt_len = inputs["input_ids"].shape[1]
         completions = generated[:, prompt_len:]
-        return self.tokenizer.batch_decode(completions, skip_special_tokens=True)
+        decoded = self.tokenizer.batch_decode(completions, skip_special_tokens=True)
+        del inputs, generated, completions
+        return decoded
+
+    def generate(self, prompts, sampling_params):
+        try:
+            return self._generate_once(prompts, sampling_params)
+        except RuntimeError as exc:
+            is_oom = "out of memory" in str(exc).lower()
+            if not is_oom:
+                raise
+            if self.device.startswith("cuda"):
+                torch.cuda.empty_cache()
+            if len(prompts) <= 1:
+                raise RuntimeError(
+                    "CUDA OOM while generating a single prompt in HF MoE backend. "
+                    "Reduce --max_tokens and/or input length."
+                ) from exc
+            mid = max(1, len(prompts) // 2)
+            left = self.generate(prompts[:mid], sampling_params)
+            right = self.generate(prompts[mid:], sampling_params)
+            return left + right
 
 
 def create_generation_backend(model_path: str, tokenizer_path: str | None, tensor_parallel_size: int, backend: str = "auto"):
