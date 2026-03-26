@@ -86,6 +86,15 @@ PY
     EVAL_MODEL_PATH="$MODEL_PATH"
   fi
 
+  CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/MATH_eval.py \
+    --model "$EVAL_MODEL_PATH" \
+    --backend "auto" \
+    --tokenizer "$TOKENIZER_PATH" \
+    --data_file "data/math_eval/MATH_test.jsonl" \
+    --batch_size 64 \
+    --tensor_parallel_size 1 \
+    --run_dir "$RUN_ROOT"
+    
   CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/gsm8k_eval.py \
     --model "$EVAL_MODEL_PATH" \
     --backend "auto" \
@@ -95,14 +104,7 @@ PY
     --tensor_parallel_size 1 \
     --run_dir "$RUN_ROOT"
 
-  CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/MATH_eval.py \
-    --model "$EVAL_MODEL_PATH" \
-    --backend "auto" \
-    --tokenizer "$TOKENIZER_PATH" \
-    --data_file "data/math_eval/MATH_test.jsonl" \
-    --batch_size 64 \
-    --tensor_parallel_size 1 \
-    --run_dir "$RUN_ROOT"
+
 done
 
 echo "=== Done evaluating all MoE-LoRA run directories ==="
