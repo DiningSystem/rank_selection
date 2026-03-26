@@ -272,6 +272,16 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
         raise err
 
 
+def save_moe_pretrained(self, save_directory: str, **kwargs):
+    """Save MoE checkpoint with optional `model.` prefix normalization."""
+    state_dict = self.state_dict()
+    normalized = {
+        (k[len("model."):] if k.startswith("model.") else k): v
+        for k, v in state_dict.items()
+    }
+    return self._moe_original_save_pretrained(save_directory, state_dict=normalized, **kwargs)
+
+
 def merge_and_unload_moe_lora(self):
     raise NotImplementedError(
         "Rank-MoE-LoRA uses input-dependent routing and cannot be exactly merged into a static linear layer."
@@ -311,6 +321,8 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
     model.mark_only_adapters_as_trainable = types.MethodType(mark_only_moe_lora_as_trainable, model)
     model.merge_and_unload = types.MethodType(merge_and_unload_moe_lora, model)
     model.load_moe_state_dict_flexible = types.MethodType(load_moe_state_dict_flexible, model)
+    model._moe_original_save_pretrained = model.save_pretrained
+    model.save_pretrained = types.MethodType(save_moe_pretrained, model)
     model.moe_lora_replaced_modules = replaced_count
     mark_only_moe_lora_as_trainable(model)
     return model
