@@ -102,6 +102,7 @@ class RankMoELoRALayer(nn.Module):
             bias=linear.bias is not None,
             freeze_base=freeze_base,
         )
+        layer = layer.to(device=linear.weight.device, dtype=linear.weight.dtype)
         with torch.no_grad():
             layer.base.weight.copy_(linear.weight)
             if linear.bias is not None and layer.base.bias is not None:
@@ -130,20 +131,26 @@ class RankMoELoRALayer(nn.Module):
 
     def forward(self, x: torch.Tensor, return_aux: bool = False):
         x_2d, original_shape = self._flatten_tokens(x)
-        base_y = self.base(x_2d)
+        base_in = x_2d if x_2d.dtype == self.base.weight.dtype else x_2d.to(self.base.weight.dtype)
+        base_y = self.base(base_in)
 
         a_tilde, b_tilde, m_a, m_b = self.masked_factors()
 
         # Hypernetwork routing over rank components.
-        g_logits = self.router(x_2d)
+        router_dtype = next(self.router.parameters()).dtype
+        router_in = x_2d if x_2d.dtype == router_dtype else x_2d.to(router_dtype)
+        g_logits = self.router(router_in)
         g = F.softmax(g_logits, dim=-1)
         g = self._topk_normalize(g)
         self._last_g = g.detach() if not return_aux else g
 
         # Efficient residual path (no ΔW materialization):
         # Ax: [batch, r_max], weighted: [batch, r_max], delta: [batch, d_out]
-        ax = F.linear(x_2d, a_tilde)
+        ax_in = x_2d if x_2d.dtype == a_tilde.dtype else x_2d.to(a_tilde.dtype)
+        ax = F.linear(ax_in, a_tilde)
         weighted = g.to(ax.dtype) * ax
+        if weighted.dtype != b_tilde.dtype:
+            weighted = weighted.to(b_tilde.dtype)
         delta = F.linear(weighted, b_tilde)
         if delta.dtype != base_y.dtype:
             delta = delta.to(base_y.dtype)
@@ -273,7 +280,7 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
-    """Save MoE checkpoint with optional `model.` prefix normalization."""
+    """Save MoE checkpoint in eval-compatible key namespace."""
     state_dict = self.state_dict()
     normalized = {
         (k[len("model."):] if k.startswith("model.") else k): v

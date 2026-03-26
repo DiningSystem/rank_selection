@@ -1,7 +1,7 @@
 import argparse
 import json
 import re
-from vllm import LLM, SamplingParams
+from vllm import SamplingParams
 import sys
 import torch
 import gc
@@ -11,7 +11,7 @@ import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.append(CURRENT_DIR)
-from moe_eval_utils import model_path_candidates
+from moe_eval_utils import create_generation_backend
 MAX_INT = sys.maxsize
 
 
@@ -73,7 +73,7 @@ def generate_prompt(instruction, input=None):
 """
 
 
-def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None):
+def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None, backend="auto"):
     """Main evaluation function for commonsense tasks."""
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
@@ -93,17 +93,7 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
     # Setup VLLM
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens)
-    llm = None
-    init_errors = []
-    for candidate_model in model_path_candidates(model):
-        candidate_tokenizer = tokenizer if tokenizer else candidate_model
-        try:
-            llm = LLM(model=candidate_model, tokenizer=candidate_tokenizer, tensor_parallel_size=tensor_parallel_size)
-            break
-        except Exception as exc:
-            init_errors.append(f"{candidate_model}: {repr(exc)}")
-    if llm is None:
-        raise RuntimeError("Failed to initialize LLM with all model path candidates:\n" + "\n".join(init_errors))
+    backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
     
     res_completions = []
     result = []
@@ -121,10 +111,8 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
             prompts = [prompts]
             
         formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
-        completions = llm.generate(formatted_prompts, sampling_params)
-        
-        for output in completions:
-            generated_text = output.outputs[0].text
+        completions = backend.generate(formatted_prompts, sampling_params)
+        for generated_text in completions:
             res_completions.append(generated_text)
 
     # Evaluate responses
@@ -178,6 +166,8 @@ def parse_args():
                       help="Batch size for evaluation")
     parser.add_argument("--tensor_parallel_size", type=int, default=1,
                       help="Tensor parallel size for model")
+    parser.add_argument("--backend", type=str, default="auto", choices=["auto", "vllm", "hf_moe"],
+                      help="Generation backend")
     parser.add_argument("--run_dir", type=str,
                       help="Directory containing the wandb run ID")
 
@@ -214,5 +204,6 @@ if __name__ == "__main__":
         end=args.end,
         batch_size=args.batch_size,
         tensor_parallel_size=args.tensor_parallel_size,
-        tokenizer=args.tokenizer
+        tokenizer=args.tokenizer,
+        backend=args.backend
     )
