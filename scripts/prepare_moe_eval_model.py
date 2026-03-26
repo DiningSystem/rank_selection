@@ -1,9 +1,15 @@
 import argparse
 import json
 import os
+import sys
 
 import torch
 from transformers import AutoModelForCausalLM
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
 
 from moe_lora import MoELoRAConfig, get_moe_lora_model, load_moe_checkpoint_state_dict, load_moe_checkpoint_flexible
 

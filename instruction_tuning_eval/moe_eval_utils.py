@@ -1,11 +1,17 @@
 import json
 import os
+import sys
 from typing import Dict
 
 import torch
 from safetensors.torch import load_file, save_file
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import LLM
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(CURRENT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
 
 from moe_lora import MoELoRAConfig, get_moe_lora_model, load_moe_checkpoint_flexible, load_moe_checkpoint_state_dict
 
