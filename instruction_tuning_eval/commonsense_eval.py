@@ -8,6 +8,7 @@ import gc
 import wandb
 from tqdm.auto import tqdm
 import os
+from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 MAX_INT = sys.maxsize
 
 
@@ -89,8 +90,9 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
     # Setup VLLM
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens)
-    tokenizer_path = tokenizer if tokenizer else model
-    llm = LLM(model=model, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
+    model_path = maybe_normalize_rank_moe_checkpoint(model)
+    tokenizer_path = tokenizer if tokenizer else model_path
+    llm = LLM(model=model_path, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
     
     res_completions = []
     result = []

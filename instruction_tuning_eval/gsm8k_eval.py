@@ -11,6 +11,7 @@ from grader import math_equal
 import wandb
 from tqdm.auto import tqdm
 import os
+from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 MAX_INT = sys.maxsize
 
 
@@ -103,8 +104,9 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
-    tokenizer_path = tokenizer if tokenizer else model
-    llm = LLM(model=model, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
+    model_path = maybe_normalize_rank_moe_checkpoint(model)
+    tokenizer_path = tokenizer if tokenizer else model_path
+    llm = LLM(model=model_path, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
     res_completions = []
     result = []
 

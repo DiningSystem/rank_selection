@@ -10,6 +10,7 @@ import sys
 from tqdm.auto import tqdm
 MAX_INT = sys.maxsize
 INVALID_ANS = "[invalid]"
+from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 
 invalid_outputs = []
 
@@ -85,8 +86,9 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=512, stop=stop_tokens)
     print('sampleing =====', sampling_params)
-    tokenizer_path = tokenizer if tokenizer else model
-    llm = LLM(model=model, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
+    model_path = maybe_normalize_rank_moe_checkpoint(model)
+    tokenizer_path = tokenizer if tokenizer else model_path
+    llm = LLM(model=model_path, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
     res_completions = []
     for idx, (prompt, prompt_answer) in enumerate(
         tqdm(zip(batch_hendrycks_math_ins, hendrycks_math_answers),

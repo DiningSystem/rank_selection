@@ -42,19 +42,6 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
   if [ -d "$RUN_ROOT/tokenizer" ]; then
     TOKENIZER_PATH="$RUN_ROOT/tokenizer"
   fi
-  MODEL_FOR_EVAL="$MODEL_PATH"
-
-  INDEX_JSON="$MODEL_PATH/model.safetensors.index.json"
-  if [ -f "$INDEX_JSON" ] && grep -q "\"model.layers\\..*\\.A\"" "$INDEX_JSON"; then
-    FIXED_MODEL_PATH="$RUN_ROOT/final_model_prefix_fixed"
-    if [ ! -d "$FIXED_MODEL_PATH" ]; then
-      echo "Detected model-prefixed Rank-MoE keys; creating normalized checkpoint at $FIXED_MODEL_PATH"
-      python scripts/normalize_moe_safetensors_prefix.py \
-        --input_dir "$MODEL_PATH" \
-        --output_dir "$FIXED_MODEL_PATH"
-    fi
-    MODEL_FOR_EVAL="$FIXED_MODEL_PATH"
-  fi
 
   echo "=== Evaluating MoE-LoRA run: $RUN_ROOT ==="
   if [ ! -d "$MODEL_PATH" ]; then
@@ -65,7 +52,7 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/commonsense_eval.py \
-      --model "$MODEL_FOR_EVAL" \
+      --model "$MODEL_PATH" \
       --tokenizer "$TOKENIZER_PATH" \
       --dataset "$dataset" \
       --data_file "data/commonsense/$dataset/test.json" \
