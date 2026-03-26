@@ -64,6 +64,7 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
 
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/gsm8k_eval.py \
         --model "$MERGED_MODEL_PATH" \
+        --backend "vllm" \
         --data_file "data/math_eval/gsm8k_test.jsonl" \
         --batch_size 128 \
         --tensor_parallel_size 1 \
@@ -71,6 +72,7 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
 
     CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/MATH_eval.py \
         --model "$MERGED_MODEL_PATH" \
+        --backend "vllm" \
         --data_file "data/math_eval/MATH_test.jsonl" \
         --batch_size 64 \
         --tensor_parallel_size 1 \

@@ -273,7 +273,7 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
-    """Save MoE checkpoint with optional `model.` prefix normalization."""
+    """Save MoE checkpoint in eval-compatible key namespace."""
     state_dict = self.state_dict()
     normalized = {
         (k[len("model."):] if k.startswith("model.") else k): v

@@ -62,6 +62,7 @@ for RUN_DIR in "${RUN_DIRS[@]}"; do
         
         CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/commonsense_eval.py \
             --model "$MERGED_MODEL_PATH" \
+            --backend "vllm" \
             --dataset "$dataset" \
             --data_file "data/commonsense/$dataset/test.json" \
             --batch_size 128 \
