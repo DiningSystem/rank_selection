@@ -11,6 +11,10 @@ from grader import math_equal
 import wandb
 from tqdm.auto import tqdm
 import os
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.append(CURRENT_DIR)
+from moe_eval_utils import model_path_candidates
 MAX_INT = sys.maxsize
 
 
@@ -72,7 +76,7 @@ def batch_data(data_list, batch_size=1):
     return batch_data
 
 
-def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1):
+def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None):
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
     gc.collect()
@@ -103,7 +107,17 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
-    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size)
+    llm = None
+    init_errors = []
+    for candidate_model in model_path_candidates(model):
+        candidate_tokenizer = tokenizer if tokenizer else candidate_model
+        try:
+            llm = LLM(model=candidate_model, tokenizer=candidate_tokenizer, tensor_parallel_size=tensor_parallel_size)
+            break
+        except Exception as exc:
+            init_errors.append(f"{candidate_model}: {repr(exc)}")
+    if llm is None:
+        raise RuntimeError("Failed to initialize LLM with all model path candidates:\n" + "\n".join(init_errors))
     res_completions = []
     result = []
 
@@ -162,6 +176,7 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)  # merged model path
+    parser.add_argument("--tokenizer", type=str, default=None)  # tokenizer path (optional)
     parser.add_argument("--data_file", type=str, default='data/math_eval/gsm8k_test.jsonl')  # data path
     parser.add_argument("--start", type=int, default=0)  # start index
     parser.add_argument("--end", type=int, default=MAX_INT)  # end index
@@ -192,4 +207,4 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
-               batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size)
+               batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer)
