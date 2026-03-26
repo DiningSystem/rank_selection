@@ -102,6 +102,7 @@ class RankMoELoRALayer(nn.Module):
             bias=linear.bias is not None,
             freeze_base=freeze_base,
         )
+        layer = layer.to(device=linear.weight.device, dtype=linear.weight.dtype)
         with torch.no_grad():
             layer.base.weight.copy_(linear.weight)
             if linear.bias is not None and layer.base.bias is not None:

@@ -160,6 +160,8 @@ class HFMoEBackend:
 
     def generate(self, prompts, sampling_params):
         inputs = self.tokenizer(prompts, return_tensors="pt", padding=True).to(self.device)
+        if "attention_mask" in inputs and inputs["attention_mask"].dtype is not torch.bool:
+            inputs["attention_mask"] = inputs["attention_mask"].bool()
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
         with torch.no_grad():
             generated = self.model.generate(
