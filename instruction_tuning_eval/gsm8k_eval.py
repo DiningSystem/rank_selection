@@ -3,7 +3,7 @@ import json
 import re
 import jsonlines
 from fraction import Fraction
-from vllm import LLM, SamplingParams
+from vllm import SamplingParams
 import sys
 import torch
 import gc
@@ -14,7 +14,7 @@ import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.append(CURRENT_DIR)
-from moe_eval_utils import model_path_candidates
+from moe_eval_utils import create_generation_backend
 MAX_INT = sys.maxsize
 
 
@@ -76,7 +76,7 @@ def batch_data(data_list, batch_size=1):
     return batch_data
 
 
-def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None):
+def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None, backend="auto"):
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
     gc.collect()
@@ -107,17 +107,7 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
-    llm = None
-    init_errors = []
-    for candidate_model in model_path_candidates(model):
-        candidate_tokenizer = tokenizer if tokenizer else candidate_model
-        try:
-            llm = LLM(model=candidate_model, tokenizer=candidate_tokenizer, tensor_parallel_size=tensor_parallel_size)
-            break
-        except Exception as exc:
-            init_errors.append(f"{candidate_model}: {repr(exc)}")
-    if llm is None:
-        raise RuntimeError("Failed to initialize LLM with all model path candidates:\n" + "\n".join(init_errors))
+    backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
     res_completions = []
     result = []
 
@@ -134,10 +124,8 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
         else:
             prompt = [prompt]
 
-        completions = llm.generate(prompt, sampling_params)
-        for output in completions:
-            prompt = output.prompt
-            generated_text = output.outputs[0].text
+        completions = backend.generate(prompt, sampling_params)
+        for generated_text in completions:
             res_completions.append(generated_text)
 
     # Second loop - evaluation
@@ -182,6 +170,7 @@ def parse_args():
     parser.add_argument("--end", type=int, default=MAX_INT)  # end index
     parser.add_argument("--batch_size", type=int, default=32)  # batch_size
     parser.add_argument("--tensor_parallel_size", type=int, default=1)  # tensor_parallel_size
+    parser.add_argument("--backend", type=str, default="auto", choices=["auto", "vllm", "hf_moe"])  # backend
     parser.add_argument("--run_dir", type=str)  # run_dir
     parser.add_argument("--no_wandb", action="store_true")  # no_wandb
     parser.add_argument("--wandb_project", type=str, default="project_name")
@@ -207,4 +196,5 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
-               batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer)
+               batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer,
+               backend=args.backend)

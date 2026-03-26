@@ -7,7 +7,7 @@ from safetensors.torch import load_file, save_file
 
 
 def denormalize_key(key: str) -> str:
-    return key[len("model."):] if key.startswith("model.layers.") else key
+    return key[len("model."):] if key.startswith("model.") else key
 
 
 def _copy_non_shard_files(input_dir: str, output_dir: str):
@@ -23,7 +23,7 @@ def _copy_non_shard_files(input_dir: str, output_dir: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert model.layers.* safetensors keys back to layers.*"
+        description="Convert model.* safetensors keys back to non-model-prefixed keys."
     )
     parser.add_argument("--input_dir", required=True, help="Directory containing model safetensors files")
     parser.add_argument(

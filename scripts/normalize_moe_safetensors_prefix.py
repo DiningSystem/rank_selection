@@ -7,7 +7,7 @@ from safetensors.torch import load_file, save_file
 
 
 def normalize_key(key: str) -> str:
-    return f"model.{key}" if key.startswith("layers.") else key
+    return f"model.{key}" if not key.startswith("model.") else key
 
 
 def main():

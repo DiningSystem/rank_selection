@@ -273,7 +273,7 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
-    """Save MoE checkpoint preserving native HF state-dict key names."""
+    """Save MoE checkpoint in eval-compatible key namespace."""
     state_dict = self.state_dict()
     return self._moe_original_save_pretrained(save_directory, state_dict=state_dict, **kwargs)
 
