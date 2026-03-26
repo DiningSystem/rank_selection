@@ -8,7 +8,10 @@ import gc
 import wandb
 from tqdm.auto import tqdm
 import os
-from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.append(CURRENT_DIR)
+from moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 MAX_INT = sys.maxsize
 
 

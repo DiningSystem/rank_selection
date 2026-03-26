@@ -10,7 +10,10 @@ import sys
 from tqdm.auto import tqdm
 MAX_INT = sys.maxsize
 INVALID_ANS = "[invalid]"
-from instruction_tuning_eval.moe_eval_utils import maybe_normalize_rank_moe_checkpoint
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.append(CURRENT_DIR)
+from moe_eval_utils import maybe_normalize_rank_moe_checkpoint
 
 invalid_outputs = []
 
