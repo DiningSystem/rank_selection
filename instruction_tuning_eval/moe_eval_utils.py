@@ -18,14 +18,27 @@ def maybe_normalize_rank_moe_checkpoint(model_path: str) -> str:
 
     with open(index_path, "r") as f:
         index_data: Dict = json.load(f)
-    keys = list(index_data.get("weight_map", {}).keys())
+    weight_map = index_data.get("weight_map", {})
+    if not isinstance(weight_map, dict):
+        return model_path
+    keys = list(weight_map.keys())
     if not any(k.startswith("model.layers.") and k.endswith(".A") for k in keys):
         return model_path
     if any(k.startswith("layers.") and k.endswith(".A") for k in keys):
         return model_path
 
     fixed_dir = f"{model_path}_prefix_fixed"
-    print(f"[moe_eval_utils] Normalizing checkpoint key prefix: {model_path} -> {fixed_dir}")
+    fixed_index = os.path.join(fixed_dir, "model.safetensors.index.json")
+    if os.path.exists(fixed_index):
+        with open(fixed_index, "r") as f:
+            fixed_data = json.load(f)
+        fixed_weight_map = fixed_data.get("weight_map", {})
+        if isinstance(fixed_weight_map, dict):
+            fixed_keys = list(fixed_weight_map.keys())
+            if any(k.startswith("layers.") and k.endswith(".A") for k in fixed_keys):
+                return fixed_dir
+
+    print(f"[moe_eval_utils] Normalizing checkpoint key prefix once: {model_path} -> {fixed_dir}")
     if os.path.isdir(fixed_dir):
         shutil.rmtree(fixed_dir)
     os.makedirs(fixed_dir, exist_ok=True)
@@ -40,7 +53,7 @@ def maybe_normalize_rank_moe_checkpoint(model_path: str) -> str:
             continue
         shutil.copy2(src, dst)
 
-    shard_names = sorted(set(index_data["weight_map"].values()))
+    shard_names = sorted(set(weight_map.values()))
     new_weight_map = {}
     for shard_name in shard_names:
         in_shard = os.path.join(model_path, shard_name)
