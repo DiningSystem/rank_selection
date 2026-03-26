@@ -83,7 +83,12 @@ def finetune():
     data_module = dict(train_dataset=train_dataset, data_collator=data_collator)
     
 
-    model, abba_config = create_peft_model_it_abba(model, args)
+    if args.peft_method == "abba":
+        model, peft_config = create_peft_model_it_abba(model, args)
+    elif args.peft_method == "moe_lora":
+        model, peft_config = create_peft_model_it_moe_lora(model, args)
+    else:
+        raise ValueError(f"Unsupported peft_method: {args.peft_method}")
 
     param_counts = count_parameters(model, verbose=False)
 
@@ -95,6 +100,11 @@ def finetune():
 
     # Setup optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+
+    if args.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        if hasattr(model, "config"):
+            model.config.use_cache = False
     
     # Training arguments
     training_args = TrainingArguments(
@@ -115,6 +125,7 @@ def finetune():
         logging_steps=1,
         logging_first_step=True,
         logging_dir=os.path.join(run_dir, "logs"),
+        gradient_checkpointing=args.gradient_checkpointing,
     )
     
     # Save training arguments
@@ -163,9 +174,14 @@ if __name__ == "__main__":
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value (assigns half of this to each adapter)")
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha value")
     parser.add_argument("--lora_dropout", type=float, default=0, help="LoRA dropout value")
+    parser.add_argument("--peft_method", type=str, default="abba", choices=["abba", "moe_lora"], help="PEFT method to train")
+    parser.add_argument("--moe_r_max", type=int, default=32, help="Rank-MoE maximum rank components (r_max)")
+    parser.add_argument("--moe_top_k", type=int, default=1, help="Top-k routed experts per token for MoE-LoRA")
+    parser.add_argument("--moe_router_hidden_dim", type=int, default=128, help="Hidden dim for router MLP (set 0 for linear router)")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
     parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="cosine", help="Learning rate scheduler")
+    parser.add_argument("--gradient_checkpointing", action="store_true", help="Enable model-wide gradient checkpointing")
     parser.add_argument("--warmup_ratio", type=float, default=0.02, help="Warmup ratio")
     parser.add_argument("--max_seq_length", type=int, default=512, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
