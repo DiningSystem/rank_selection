@@ -237,6 +237,38 @@ def mark_only_moe_lora_as_trainable(self):
                 param.requires_grad = True
 
 
+def _with_prefix(state_dict: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
+    return {f"{prefix}{k}": v for k, v in state_dict.items()}
+
+
+def _strip_prefix(state_dict: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
+    return {k[len(prefix):]: v for k, v in state_dict.items() if k.startswith(prefix)}
+
+
+def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], strict: bool = True):
+    """Load state dict while handling optional leading `model.` prefix mismatch."""
+    try:
+        return self.load_state_dict(state_dict, strict=strict)
+    except RuntimeError as err:
+        model_keys = set(self.state_dict().keys())
+        has_model_prefix = any(k.startswith("model.") for k in state_dict.keys())
+
+        candidates = []
+        if has_model_prefix:
+            candidates.append(_strip_prefix(state_dict, "model."))
+        else:
+            candidates.append(_with_prefix(state_dict, "model."))
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            overlap = len(model_keys.intersection(candidate.keys()))
+            if overlap == 0:
+                continue
+            return self.load_state_dict(candidate, strict=strict)
+        raise err
+
+
 def merge_and_unload_moe_lora(self):
     raise NotImplementedError(
         "Rank-MoE-LoRA uses input-dependent routing and cannot be exactly merged into a static linear layer."
@@ -275,6 +307,7 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
 
     model.mark_only_adapters_as_trainable = types.MethodType(mark_only_moe_lora_as_trainable, model)
     model.merge_and_unload = types.MethodType(merge_and_unload_moe_lora, model)
+    model.load_moe_state_dict_flexible = types.MethodType(load_moe_state_dict_flexible, model)
     model.moe_lora_replaced_modules = replaced_count
     mark_only_moe_lora_as_trainable(model)
     return model
