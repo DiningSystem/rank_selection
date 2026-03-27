@@ -5,7 +5,7 @@ import jsonlines
 import wandb
 import utils
 import os
-from vllm import LLM, SamplingParams
+from vllm import SamplingParams
 import sys
 from tqdm.auto import tqdm
 MAX_INT = sys.maxsize
@@ -13,7 +13,7 @@ INVALID_ANS = "[invalid]"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.append(CURRENT_DIR)
-from moe_eval_utils import model_path_candidates
+from moe_eval_utils import create_generation_backend
 
 invalid_outputs = []
 
@@ -63,7 +63,7 @@ def batch_data(data_list, batch_size=1):
     return batch_data
 
 
-def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None):
+def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None, backend="auto"):
     hendrycks_math_ins = []
     hendrycks_math_answers = []
     problem_prompt = (
@@ -89,17 +89,7 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=512, stop=stop_tokens)
     print('sampleing =====', sampling_params)
-    llm = None
-    init_errors = []
-    for candidate_model in model_path_candidates(model):
-        candidate_tokenizer = tokenizer if tokenizer else candidate_model
-        try:
-            llm = LLM(model=candidate_model, tokenizer=candidate_tokenizer, tensor_parallel_size=tensor_parallel_size)
-            break
-        except Exception as exc:
-            init_errors.append(f"{candidate_model}: {repr(exc)}")
-    if llm is None:
-        raise RuntimeError("Failed to initialize LLM with all model path candidates:\n" + "\n".join(init_errors))
+    backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
     res_completions = []
     for idx, (prompt, prompt_answer) in enumerate(
         tqdm(zip(batch_hendrycks_math_ins, hendrycks_math_answers),
@@ -110,10 +100,8 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
             pass
         else:
             prompt = [prompt]
-        completions = llm.generate(prompt, sampling_params)
-        for output in completions:
-            prompt_temp = output.prompt
-            generated_text = output.outputs[0].text
+        completions = backend.generate(prompt, sampling_params)
+        for generated_text in completions:
             res_completions.append(generated_text)
 
     results = []
@@ -140,6 +128,7 @@ def parse_args():
     parser.add_argument("--end", type=int, default=MAX_INT)  # end index
     parser.add_argument("--batch_size", type=int, default=32)  # batch_size
     parser.add_argument("--tensor_parallel_size", type=int, default=1)  # tensor_parallel_size
+    parser.add_argument("--backend", type=str, default="auto", choices=["auto", "vllm", "hf_moe"])  # backend
     parser.add_argument("--run_dir", type=str)  # run_dir
     parser.add_argument("--no_wandb", action="store_true")  # no_wandb
     parser.add_argument("--wandb_project", type=str, default="project_name")
@@ -163,4 +152,5 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     test_hendrycks_math(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
-                        batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer)
+                        batch_size=args.batch_size, tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer,
+                        backend=args.backend)

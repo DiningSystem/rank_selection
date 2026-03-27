@@ -5,6 +5,12 @@
 # No adapter merge step is needed.
 
 GPU_ID=0
+BASE_MODEL=${BASE_MODEL:-""}
+PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
+VLLM_BATCH_SIZE_GSM8K=${VLLM_BATCH_SIZE_GSM8K:-128}
+VLLM_BATCH_SIZE_MATH=${VLLM_BATCH_SIZE_MATH:-64}
+HF_BATCH_SIZE_GSM8K=${HF_BATCH_SIZE_GSM8K:-16}
+HF_BATCH_SIZE_MATH=${HF_BATCH_SIZE_MATH:-8}
 RUN_DIRS=()
 
 if [ "$#" -gt 0 ]; then
@@ -32,6 +38,7 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
   if [ -d "$RUN_ROOT/tokenizer" ]; then
     TOKENIZER_PATH="$RUN_ROOT/tokenizer"
   fi
+  EVAL_MODEL_PATH="$RUN_ROOT/final_model_eval_ready"
 
   echo "=== Evaluating MoE-LoRA run: $RUN_ROOT ==="
   if [ ! -d "$MODEL_PATH" ]; then
@@ -39,19 +46,86 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     continue
   fi
 
+  NEED_PREPARE=0
+  if [ "$PREPARE_MOE_EVAL" = "always" ]; then
+    NEED_PREPARE=1
+  elif [ "$PREPARE_MOE_EVAL" = "never" ]; then
+    NEED_PREPARE=0
+  else
+    python - "$MODEL_PATH" <<'PY'
+import json
+import os
+import sys
+from safetensors.torch import load_file
+
+model_path = sys.argv[1]
+index_path = os.path.join(model_path, "model.safetensors.index.json")
+single_path = os.path.join(model_path, "model.safetensors")
+keys = set()
+if os.path.exists(index_path):
+    with open(index_path, "r") as f:
+        keys = set(json.load(f).get("weight_map", {}).keys())
+elif os.path.exists(single_path):
+    keys = set(load_file(single_path).keys())
+
+has_lm_head = "lm_head.weight" in keys
+has_embed = ("model.embed_tokens.weight" in keys) or ("embed_tokens.weight" in keys)
+has_norm = ("model.norm.weight" in keys) or ("norm.weight" in keys)
+sys.exit(0 if (has_lm_head and has_embed and has_norm) else 1)
+PY
+    if [ $? -ne 0 ]; then
+      NEED_PREPARE=1
+    fi
+  fi
+
+  if [ "$NEED_PREPARE" -eq 1 ]; then
+    echo "=== Preparing eval-ready MoE full model (base + MoE checkpoint) ==="
+    PREPARE_ARGS=(--checkpoint_dir "$MODEL_PATH" --output_dir "$EVAL_MODEL_PATH")
+    if [ -n "$BASE_MODEL" ]; then
+      PREPARE_ARGS+=(--base_model "$BASE_MODEL")
+    fi
+    python scripts/prepare_moe_eval_model.py "${PREPARE_ARGS[@]}"
+  else
+    echo "=== Checkpoint appears full; skipping base+MoE preparation ==="
+    EVAL_MODEL_PATH="$MODEL_PATH"
+  fi
+
+  BACKEND_MODE="auto"
+  EFFECTIVE_GSM8K_BS="$VLLM_BATCH_SIZE_GSM8K"
+  EFFECTIVE_MATH_BS="$VLLM_BATCH_SIZE_MATH"
+  IS_ADAPTIVE=$(python - "$EVAL_MODEL_PATH" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+index_path = os.path.join(path, "model.safetensors.index.json")
+keys = []
+if os.path.exists(index_path):
+    with open(index_path, "r") as f:
+        keys = list(json.load(f).get("weight_map", {}).keys())
+print("1" if (any(k.endswith(".A") or k.endswith(".B") for k in keys) and any(".base.weight" in k for k in keys)) else "0")
+PY
+  )
+  if [ "$IS_ADAPTIVE" = "1" ]; then
+    BACKEND_MODE="hf_moe"
+    EFFECTIVE_GSM8K_BS="$HF_BATCH_SIZE_GSM8K"
+    EFFECTIVE_MATH_BS="$HF_BATCH_SIZE_MATH"
+    echo "=== Adaptive MoE detected: using backend=$BACKEND_MODE with reduced batch sizes (${EFFECTIVE_GSM8K_BS}/${EFFECTIVE_MATH_BS}) ==="
+  fi
+
   CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/gsm8k_eval.py \
-    --model "$MODEL_PATH" \
+    --model "$EVAL_MODEL_PATH" \
+    --backend "$BACKEND_MODE" \
     --tokenizer "$TOKENIZER_PATH" \
     --data_file "data/math_eval/gsm8k_test.jsonl" \
-    --batch_size 128 \
+    --batch_size "$EFFECTIVE_GSM8K_BS" \
     --tensor_parallel_size 1 \
     --run_dir "$RUN_ROOT"
 
   CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/MATH_eval.py \
-    --model "$MODEL_PATH" \
+    --model "$EVAL_MODEL_PATH" \
+    --backend "$BACKEND_MODE" \
     --tokenizer "$TOKENIZER_PATH" \
     --data_file "data/math_eval/MATH_test.jsonl" \
-    --batch_size 64 \
+    --batch_size "$EFFECTIVE_MATH_BS" \
     --tensor_parallel_size 1 \
     --run_dir "$RUN_ROOT"
 done
