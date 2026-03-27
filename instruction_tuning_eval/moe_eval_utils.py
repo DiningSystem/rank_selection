@@ -155,8 +155,9 @@ class HFMoEBackend:
         model = get_moe_lora_model(base_model, moe_config)
         load_moe_checkpoint_flexible(model, model_path, strict=False)
         self.model = model.eval().to(self.device)
+        self.use_cache = os.getenv("HF_MOE_USE_CACHE", "0") == "1"
         if hasattr(self.model.config, "use_cache"):
-            self.model.config.use_cache = True
+            self.model.config.use_cache = self.use_cache
         tokenizer_source = tokenizer_path if tokenizer_path else base_model_name
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
         if self.tokenizer.pad_token_id is None:
@@ -181,6 +182,7 @@ class HFMoEBackend:
         gen_kwargs = {
             "max_new_tokens": output_len,
             "do_sample": do_sample,
+            "use_cache": self.use_cache,
             "pad_token_id": self.tokenizer.pad_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
         }
@@ -190,8 +192,19 @@ class HFMoEBackend:
         with torch.inference_mode():
             generated = self.model.generate(**inputs, **gen_kwargs)
         prompt_len = inputs["input_ids"].shape[1]
-        completions = generated[:, prompt_len:]
+        completions = generated[:, prompt_len:].cpu()
         decoded = self.tokenizer.batch_decode(completions, skip_special_tokens=True)
+        stop_tokens = getattr(sampling_params, "stop", None)
+        if stop_tokens:
+            processed = []
+            for text in decoded:
+                cut = len(text)
+                for stop in stop_tokens:
+                    idx = text.find(stop)
+                    if idx != -1:
+                        cut = min(cut, idx)
+                processed.append(text[:cut])
+            decoded = processed
         del inputs, generated, completions
         return decoded
 

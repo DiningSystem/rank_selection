@@ -50,17 +50,9 @@ def process_results(doc, completion, answer):
 
 
 def batch_data(data_list, batch_size=1):
-    n = len(data_list) // batch_size
-    batch_data = []
-    for i in range(n-1):
-        start = i * batch_size
-        end = (i+1)*batch_size
-        batch_data.append(data_list[start:end])
-
-    last_start = (n-1) * batch_size
-    last_end = MAX_INT
-    batch_data.append(data_list[last_start:last_end])
-    return batch_data
+    if batch_size <= 0:
+        raise ValueError("batch_size must be > 0")
+    return [data_list[i:i + batch_size] for i in range(0, len(data_list), batch_size)]
 
 
 def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None, backend="auto"):

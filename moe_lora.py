@@ -142,7 +142,12 @@ class RankMoELoRALayer(nn.Module):
         g_logits = self.router(router_in)
         g = F.softmax(g_logits, dim=-1)
         g = self._topk_normalize(g)
-        self._last_g = g.detach() if not return_aux else g
+        if return_aux:
+            self._last_g = g
+        elif self.training:
+            self._last_g = g.detach()
+        else:
+            self._last_g = None
 
         # Efficient residual path (no ΔW materialization):
         # Ax: [batch, r_max], weighted: [batch, r_max], delta: [batch, d_out]
@@ -154,8 +159,11 @@ class RankMoELoRALayer(nn.Module):
         delta = F.linear(weighted, b_tilde)
         if delta.dtype != base_y.dtype:
             delta = delta.to(base_y.dtype)
-
-        y = (base_y + delta).reshape(*original_shape[:-1], self.d_out)
+        if (not self.training) and (not torch.is_grad_enabled()):
+            base_y.add_(delta)
+            y = base_y.reshape(*original_shape[:-1], self.d_out)
+        else:
+            y = (base_y + delta).reshape(*original_shape[:-1], self.d_out)
 
         with torch.no_grad():
             self.rank_usage_counts += (g > 0).sum(dim=0).to(self.rank_usage_counts.dtype)
