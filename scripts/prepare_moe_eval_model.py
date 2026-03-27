@@ -61,7 +61,7 @@ def main():
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         torch_dtype=torch.bfloat16,
-        device_map="cpu",
+        device_map="cuda",
     )
 
     moe_config = MoELoRAConfig(
