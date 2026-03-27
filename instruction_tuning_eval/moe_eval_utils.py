@@ -194,6 +194,17 @@ class HFMoEBackend:
         prompt_len = inputs["input_ids"].shape[1]
         completions = generated[:, prompt_len:].cpu()
         decoded = self.tokenizer.batch_decode(completions, skip_special_tokens=True)
+        stop_tokens = getattr(sampling_params, "stop", None)
+        if stop_tokens:
+            processed = []
+            for text in decoded:
+                cut = len(text)
+                for stop in stop_tokens:
+                    idx = text.find(stop)
+                    if idx != -1:
+                        cut = min(cut, idx)
+                processed.append(text[:cut])
+            decoded = processed
         del inputs, generated, completions
         return decoded
 
