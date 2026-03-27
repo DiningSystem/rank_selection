@@ -155,7 +155,9 @@ class HFMoEBackend:
         model = get_moe_lora_model(base_model, moe_config)
         load_moe_checkpoint_flexible(model, model_path, strict=False)
         self.model = model.eval().to(self.device)
-        self.use_cache = os.getenv("HF_MOE_USE_CACHE", "0") == "1"
+        # KV cache is critical for decode-time throughput in autoregressive generation.
+        # Keep it enabled by default and allow opting out via env var for low-memory GPUs.
+        self.use_cache = os.getenv("HF_MOE_USE_CACHE", "1") == "1"
         if hasattr(self.model.config, "use_cache"):
             self.model.config.use_cache = self.use_cache
         tokenizer_source = tokenizer_path if tokenizer_path else base_model_name
@@ -166,7 +168,7 @@ class HFMoEBackend:
         if getattr(self.tokenizer, "model_max_length", 0) < self.max_context_len:
             self.tokenizer.model_max_length = self.max_context_len
 
-    def _generate_once(self, prompts, sampling_params, max_input_len=None, max_new_tokens=None):
+    def _generate_once(self, prompts, sampling_params, max_input_len=None, max_new_tokens=None, use_cache=None):
         input_len = self.max_context_len if max_input_len is None else int(max_input_len)
         inputs = self.tokenizer(
             prompts,
@@ -179,10 +181,11 @@ class HFMoEBackend:
             inputs["attention_mask"] = inputs["attention_mask"].bool()
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
         output_len = int(getattr(sampling_params, "max_tokens", 256)) if max_new_tokens is None else int(max_new_tokens)
+        use_cache_flag = self.use_cache if use_cache is None else bool(use_cache)
         gen_kwargs = {
             "max_new_tokens": output_len,
             "do_sample": do_sample,
-            "use_cache": self.use_cache,
+            "use_cache": use_cache_flag,
             "pad_token_id": self.tokenizer.pad_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
         }
@@ -237,6 +240,14 @@ class HFMoEBackend:
                         except RuntimeError as nested_exc:
                             if "out of memory" not in str(nested_exc).lower():
                                 raise
+                # Final memory fallback: disable KV cache only for this request.
+                try:
+                    if self.device.startswith("cuda"):
+                        torch.cuda.empty_cache()
+                    return self._generate_once([prompt], sampling_params, max_input_len=max(512, self.max_context_len // 4), max_new_tokens=max(16, base_new_tokens // 4), use_cache=False)
+                except RuntimeError as nested_exc:
+                    if "out of memory" not in str(nested_exc).lower():
+                        raise
                 raise RuntimeError(
                     "CUDA OOM while generating a single prompt in HF MoE backend even after "
                     "automatic backoff on input length and max_new_tokens."
