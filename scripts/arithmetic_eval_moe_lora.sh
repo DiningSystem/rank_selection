@@ -61,15 +61,6 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     echo "=== Adaptive MoE detected: using backend=$BACKEND_MODE with reduced batch sizes (${EFFECTIVE_GSM8K_BS}/${EFFECTIVE_MATH_BS}) ==="
   fi
 
-  CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/gsm8k_eval.py \
-    --model "$EVAL_MODEL_PATH" \
-    --backend "$BACKEND_MODE" \
-    --tokenizer "$TOKENIZER_PATH" \
-    --data_file "data/math_eval/gsm8k_test.jsonl" \
-    --batch_size "$EFFECTIVE_GSM8K_BS" \
-    --tensor_parallel_size 1 \
-    --run_dir "$RUN_ROOT"
-
   CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/MATH_eval.py \
     --model "$EVAL_MODEL_PATH" \
     --backend "$BACKEND_MODE" \
@@ -78,6 +69,18 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     --batch_size "$EFFECTIVE_MATH_BS" \
     --tensor_parallel_size 1 \
     --run_dir "$RUN_ROOT"
+    
+  CUDA_VISIBLE_DEVICES=$GPU_ID python instruction_tuning_eval/gsm8k_eval.py \
+    --model "$EVAL_MODEL_PATH" \
+    --backend "$BACKEND_MODE" \
+    --tokenizer "$TOKENIZER_PATH" \
+    --data_file "data/math_eval/gsm8k_test.jsonl" \
+    --batch_size "$EFFECTIVE_GSM8K_BS" \
+    --tensor_parallel_size 1 \
+    --run_dir "$RUN_ROOT"
+    
+
+
 done
 
 echo "=== Done evaluating all MoE-LoRA run directories ==="
