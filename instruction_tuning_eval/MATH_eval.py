@@ -83,11 +83,14 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     print('sampleing =====', sampling_params)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
     res_completions = []
-    for idx, (prompt, prompt_answer) in enumerate(
-        tqdm(zip(batch_hendrycks_math_ins, hendrycks_math_answers),
-            total=len(batch_hendrycks_math_ins), 
+    for idx, prompt in enumerate(
+        tqdm(
+            batch_hendrycks_math_ins,
+            total=len(batch_hendrycks_math_ins),
             desc="Generating responses...",
-            ncols=100)):
+            ncols=100,
+        )
+    ):
         if isinstance(prompt, list):
             pass
         else:
@@ -106,7 +109,7 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     if not args.no_wandb:
         wandb.log({"eval/math_acc": acc})
     
-    print('len invalid outputs ====', len(invalid_outputs), ', valid_outputs===', invalid_outputs)
+    print('len invalid outputs ====', len(invalid_outputs))
     print('start===', start, ', end====',end)
     print('length====', len(results), ', acc====', acc)
 

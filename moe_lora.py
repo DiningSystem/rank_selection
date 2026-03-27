@@ -67,6 +67,7 @@ class RankMoELoRALayer(nn.Module):
         # Shared low-rank parameters.
         self.B = nn.Parameter(torch.empty(d_out, r_max))
         self.A = nn.Parameter(torch.empty(r_max, d_in))
+        self.rank_scale = nn.Parameter(torch.ones(r_max))
 
         # Mask logits; masks are applied per-rank-component before multiplication.
         self.S_b = nn.Parameter(torch.zeros(d_out, r_max))
@@ -142,18 +143,15 @@ class RankMoELoRALayer(nn.Module):
         g_logits = self.router(router_in)
         g = F.softmax(g_logits, dim=-1)
         g = self._topk_normalize(g)
-        if return_aux:
-            self._last_g = g
-        elif self.training:
-            self._last_g = g.detach()
-        else:
-            self._last_g = None
+        self._last_g = g if self.training or return_aux else None
 
         # Efficient residual path (no ΔW materialization):
         # Ax: [batch, r_max], weighted: [batch, r_max], delta: [batch, d_out]
         ax_in = x_2d if x_2d.dtype == a_tilde.dtype else x_2d.to(a_tilde.dtype)
         ax = F.linear(ax_in, a_tilde)
         weighted = g.to(ax.dtype) * ax
+        rank_scale = self.rank_scale.to(weighted.dtype).view(1, -1)
+        weighted = weighted * rank_scale
         if weighted.dtype != b_tilde.dtype:
             weighted = weighted.to(b_tilde.dtype)
         delta = F.linear(weighted, b_tilde)
@@ -174,6 +172,8 @@ class RankMoELoRALayer(nn.Module):
 
         aux = {
             "rank_sparsity": self.rank_sparsity_loss(g),
+            "rank_entropy": self.rank_entropy_loss(g),
+            "load_balancing": self.load_balancing_loss(g),
             "mask_l1": self.mask_sparsity_loss(m_a, m_b),
             "avg_active_rank": self.average_active_rank(g),
             "g_distribution": g.mean(dim=0),
@@ -206,6 +206,23 @@ class RankMoELoRALayer(nn.Module):
         denom = torch.clamp(self.routed_token_count, min=1.0)
         return self.rank_usage_counts / denom
 
+    def rank_entropy_loss(self, g: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Entropy regularizer over per-token routing distribution."""
+        g_ = self._last_g if g is None else g
+        if g_ is None:
+            raise RuntimeError("rank_entropy_loss requires forward pass or explicit g")
+        entropy = -(g_ * torch.log(g_.clamp_min(1e-9))).sum(dim=-1)
+        return entropy.mean()
+
+    def load_balancing_loss(self, g: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Encourage balanced usage across routed ranks."""
+        g_ = self._last_g if g is None else g
+        if g_ is None:
+            raise RuntimeError("load_balancing_loss requires forward pass or explicit g")
+        rank_probs = g_.mean(dim=0)
+        uniform = torch.full_like(rank_probs, 1.0 / rank_probs.numel())
+        return torch.sum((rank_probs - uniform) ** 2)
+
     def debug_rank1_equivalence(self) -> torch.Tensor:
         a_tilde, b_tilde, _, _ = self.masked_factors()
         delta_direct = b_tilde @ a_tilde
@@ -219,6 +236,8 @@ class MoELoRAConfig:
     r_max: Optional[int] = None
     top_k: int = 1
     router_hidden_dim: Optional[int] = None
+    entropy_loss_weight: float = 0.0
+    load_balance_loss_weight: float = 0.0
     target_modules: Optional[Sequence[str]] = None
     freeze_base: bool = True
 
@@ -255,40 +274,13 @@ def mark_only_moe_lora_as_trainable(self):
                 param.requires_grad = True
 
 
-def _with_prefix(state_dict: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
-    return {f"{prefix}{k}": v for k, v in state_dict.items()}
-
-
-def _strip_prefix(state_dict: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
-    return {k[len(prefix):]: v for k, v in state_dict.items() if k.startswith(prefix)}
-
-
 def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], strict: bool = True):
-    """Load state dict while handling optional leading `model.` prefix mismatch."""
-    try:
-        return self.load_state_dict(state_dict, strict=strict)
-    except RuntimeError as err:
-        model_keys = set(self.state_dict().keys())
-        has_model_prefix = any(k.startswith("model.") for k in state_dict.keys())
-
-        candidates = []
-        if has_model_prefix:
-            candidates.append(_strip_prefix(state_dict, "model."))
-        else:
-            candidates.append(_with_prefix(state_dict, "model."))
-
-        for candidate in candidates:
-            if not candidate:
-                continue
-            overlap = len(model_keys.intersection(candidate.keys()))
-            if overlap == 0:
-                continue
-            return self.load_state_dict(candidate, strict=strict)
-        raise err
+    """Load state dict using standard Hugging Face key namespace."""
+    return self.load_state_dict(state_dict, strict=strict)
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
-    """Save MoE checkpoint in eval-compatible key namespace."""
+    """Save MoE checkpoint using standard Hugging Face `save_pretrained` format."""
     state_dict = self.state_dict()
     return self._moe_original_save_pretrained(save_directory, state_dict=state_dict, **kwargs)
 
