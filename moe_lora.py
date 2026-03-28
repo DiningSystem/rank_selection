@@ -346,12 +346,25 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
             "Please verify checkpoint format and base model compatibility."
         )
 
+    overlap_ratio = best_overlap / max(1, len(model_keys))
     if best_overlap < int(0.5 * len(model_keys)):
         print(
             f"[moe_lora] Warning: low checkpoint/model key overlap ({best_overlap}/{len(model_keys)}). "
             "Loading may be incomplete and can degrade eval quality."
         )
-    return self.load_state_dict(best_candidate, strict=strict)
+    else:
+        print(f"[moe_lora] checkpoint/model key overlap: {best_overlap}/{len(model_keys)} ({overlap_ratio:.1%})")
+
+    load_result = self.load_state_dict(best_candidate, strict=strict)
+    if not strict:
+        missing = len(getattr(load_result, "missing_keys", []))
+        unexpected = len(getattr(load_result, "unexpected_keys", []))
+        if missing > int(0.2 * len(model_keys)):
+            print(
+                f"[moe_lora] Warning: large number of missing keys after load: {missing} "
+                f"(unexpected: {unexpected}). This likely indicates checkpoint mismatch."
+            )
+    return load_result
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
