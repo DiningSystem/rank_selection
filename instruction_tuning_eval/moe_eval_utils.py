@@ -1,10 +1,9 @@
 import json
 import os
 import sys
-from typing import Dict
 
 import torch
-from safetensors.torch import load_file, save_file
+from safetensors.torch import load_file
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import LLM
 
@@ -16,70 +15,9 @@ if REPO_ROOT not in sys.path:
 from moe_lora import MoELoRAConfig, get_moe_lora_model, load_moe_checkpoint_flexible, load_moe_checkpoint_state_dict
 
 
-def _normalize_key(key: str) -> str:
-    return f"model.{key}" if key.startswith("layers.") else key
-
-
-def maybe_normalize_rank_moe_checkpoint(model_path: str) -> str:
-    """Normalize Rank-MoE checkpoint key prefixes in place for eval loader compatibility.
-
-    Our vLLM eval stack expects checkpoint names without a leading ``model.``.
-    If a checkpoint is saved with ``model.*`` keys, rewrite to ``*``.
-    """
-    index_path = os.path.join(model_path, "model.safetensors.index.json")
-    single_path = os.path.join(model_path, "model.safetensors")
-    if not os.path.exists(index_path) and not os.path.exists(single_path):
-        return model_path
-
-    if os.path.exists(index_path):
-        with open(index_path, "r") as f:
-            index_data: Dict = json.load(f)
-        weight_map = index_data.get("weight_map", {})
-        if not isinstance(weight_map, dict):
-            return model_path
-        keys = list(weight_map.keys())
-    else:
-        keys = list(load_file(single_path).keys())
-
-    has_model_prefix = any(k.startswith("model.") for k in keys)
-    has_plain_prefix = any(not k.startswith("model.") for k in keys)
-    if not has_model_prefix or has_plain_prefix:
-        return model_path
-
-    print(f"[moe_eval_utils] Normalizing checkpoint key prefix in place: {model_path}")
-
-    if os.path.exists(index_path):
-        shard_names = sorted(set(weight_map.values()))
-        new_weight_map = {}
-        for shard_name in shard_names:
-            in_shard = os.path.join(model_path, shard_name)
-            tensors = load_file(in_shard)
-            normalized = {}
-            for k, v in tensors.items():
-                nk = _normalize_key(k)
-                normalized[nk] = v
-                new_weight_map[nk] = shard_name
-            tmp_shard = f"{in_shard}.tmp"
-            save_file(normalized, tmp_shard)
-            os.replace(tmp_shard, in_shard)
-
-        tmp_index = f"{index_path}.tmp"
-        with open(tmp_index, "w") as f:
-            json.dump({"metadata": index_data.get("metadata", {}), "weight_map": new_weight_map}, f, indent=2)
-        os.replace(tmp_index, index_path)
-    else:
-        tensors = load_file(single_path)
-        normalized = {_normalize_key(k): v for k, v in tensors.items()}
-        tmp_single = f"{single_path}.tmp"
-        save_file(normalized, tmp_single)
-        os.replace(tmp_single, single_path)
-
-    return model_path
-
-
 def model_path_candidates(model_path: str):
     """Candidate model paths to try for evaluation loaders."""
-    return [maybe_normalize_rank_moe_checkpoint(model_path)]
+    return [model_path]
 
 
 def _checkpoint_keys(model_path: str):
@@ -155,7 +93,9 @@ class HFMoEBackend:
         model = get_moe_lora_model(base_model, moe_config)
         load_moe_checkpoint_flexible(model, model_path, strict=False)
         self.model = model.eval().to(self.device)
-        self.use_cache = os.getenv("HF_MOE_USE_CACHE", "0") == "1"
+        # KV cache is critical for decode-time throughput in autoregressive generation.
+        # Keep it enabled by default and allow opting out via env var for low-memory GPUs.
+        self.use_cache = os.getenv("HF_MOE_USE_CACHE", "1") == "1"
         if hasattr(self.model.config, "use_cache"):
             self.model.config.use_cache = self.use_cache
         tokenizer_source = tokenizer_path if tokenizer_path else base_model_name
@@ -166,7 +106,7 @@ class HFMoEBackend:
         if getattr(self.tokenizer, "model_max_length", 0) < self.max_context_len:
             self.tokenizer.model_max_length = self.max_context_len
 
-    def _generate_once(self, prompts, sampling_params, max_input_len=None, max_new_tokens=None):
+    def _generate_once(self, prompts, sampling_params, max_input_len=None, max_new_tokens=None, use_cache=None):
         input_len = self.max_context_len if max_input_len is None else int(max_input_len)
         inputs = self.tokenizer(
             prompts,
@@ -179,10 +119,11 @@ class HFMoEBackend:
             inputs["attention_mask"] = inputs["attention_mask"].bool()
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
         output_len = int(getattr(sampling_params, "max_tokens", 256)) if max_new_tokens is None else int(max_new_tokens)
+        use_cache_flag = self.use_cache if use_cache is None else bool(use_cache)
         gen_kwargs = {
             "max_new_tokens": output_len,
             "do_sample": do_sample,
-            "use_cache": self.use_cache,
+            "use_cache": use_cache_flag,
             "pad_token_id": self.tokenizer.pad_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
         }
@@ -237,6 +178,14 @@ class HFMoEBackend:
                         except RuntimeError as nested_exc:
                             if "out of memory" not in str(nested_exc).lower():
                                 raise
+                # Final memory fallback: disable KV cache only for this request.
+                try:
+                    if self.device.startswith("cuda"):
+                        torch.cuda.empty_cache()
+                    return self._generate_once([prompt], sampling_params, max_input_len=max(512, self.max_context_len // 4), max_new_tokens=max(16, base_new_tokens // 4), use_cache=False)
+                except RuntimeError as nested_exc:
+                    if "out of memory" not in str(nested_exc).lower():
+                        raise
                 raise RuntimeError(
                     "CUDA OOM while generating a single prompt in HF MoE backend even after "
                     "automatic backoff on input length and max_new_tokens."
@@ -249,13 +198,11 @@ class HFMoEBackend:
 
 def create_generation_backend(model_path: str, tokenizer_path: str | None, tensor_parallel_size: int, backend: str = "auto"):
     if backend == "vllm":
-        normalized_path = maybe_normalize_rank_moe_checkpoint(model_path)
-        return VLLMBackend(normalized_path, tokenizer_path, tensor_parallel_size)
+        return VLLMBackend(model_path, tokenizer_path, tensor_parallel_size)
     if backend == "hf_moe":
         return HFMoEBackend(model_path, tokenizer_path)
 
     if is_adaptive_moe_checkpoint(model_path):
         print("[moe_eval_utils] Detected adaptive MoE checkpoint; using HF MoE backend for eval.")
         return HFMoEBackend(model_path, tokenizer_path)
-    normalized_path = maybe_normalize_rank_moe_checkpoint(model_path)
-    return VLLMBackend(normalized_path, tokenizer_path, tensor_parallel_size)
+    return VLLMBackend(model_path, tokenizer_path, tensor_parallel_size)
