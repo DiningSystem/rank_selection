@@ -161,31 +161,56 @@ class HFMoEBackend:
             if len(prompts) <= 1:
                 prompt = prompts[0]
                 base_new_tokens = int(getattr(sampling_params, "max_tokens", 256))
-                fallback_new_tokens = [
-                    max(32, base_new_tokens // 2),
-                    max(16, base_new_tokens // 4),
-                ]
-                fallback_input_lens = [
-                    max(1024, self.max_context_len // 2),
-                    max(512, self.max_context_len // 4),
-                ]
-                for max_in in fallback_input_lens:
-                    for max_out in fallback_new_tokens:
-                        try:
-                            if self.device.startswith("cuda"):
-                                torch.cuda.empty_cache()
-                            return self._generate_once([prompt], sampling_params, max_input_len=max_in, max_new_tokens=max_out)
-                        except RuntimeError as nested_exc:
-                            if "out of memory" not in str(nested_exc).lower():
-                                raise
-                # Final memory fallback: disable KV cache only for this request.
+                # First fallback: keep generation length unchanged, only disable cache.
                 try:
                     if self.device.startswith("cuda"):
                         torch.cuda.empty_cache()
-                    return self._generate_once([prompt], sampling_params, max_input_len=max(512, self.max_context_len // 4), max_new_tokens=max(16, base_new_tokens // 4), use_cache=False)
+                    return self._generate_once(
+                        [prompt],
+                        sampling_params,
+                        max_input_len=self.max_context_len,
+                        max_new_tokens=base_new_tokens,
+                        use_cache=False,
+                    )
                 except RuntimeError as nested_exc:
                     if "out of memory" not in str(nested_exc).lower():
                         raise
+                # Second fallback: gradually reduce input length while preserving output budget.
+                fallback_input_lens = [
+                    max(2048, self.max_context_len // 2),
+                    max(1024, self.max_context_len // 4),
+                    max(512, self.max_context_len // 8),
+                ]
+                for max_in in fallback_input_lens:
+                    try:
+                        if self.device.startswith("cuda"):
+                            torch.cuda.empty_cache()
+                        return self._generate_once(
+                            [prompt],
+                            sampling_params,
+                            max_input_len=max_in,
+                            max_new_tokens=base_new_tokens,
+                            use_cache=False,
+                        )
+                    except RuntimeError as nested_exc:
+                        if "out of memory" not in str(nested_exc).lower():
+                            raise
+                # Final fallback: reduce new tokens only as a last resort.
+                fallback_new_tokens = [max(256, base_new_tokens // 2), max(128, base_new_tokens // 4), max(64, base_new_tokens // 8)]
+                for max_out in fallback_new_tokens:
+                    try:
+                        if self.device.startswith("cuda"):
+                            torch.cuda.empty_cache()
+                        return self._generate_once(
+                            [prompt],
+                            sampling_params,
+                            max_input_len=max(512, self.max_context_len // 8),
+                            max_new_tokens=max_out,
+                            use_cache=False,
+                        )
+                    except RuntimeError as nested_exc:
+                        if "out of memory" not in str(nested_exc).lower():
+                            raise
                 raise RuntimeError(
                     "CUDA OOM while generating a single prompt in HF MoE backend even after "
                     "automatic backoff on input length and max_new_tokens."
