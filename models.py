@@ -260,6 +260,7 @@ class MoEAuxLossTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.moe_entropy_loss_weight = float(moe_entropy_loss_weight)
         self.moe_load_balance_loss_weight = float(moe_load_balance_loss_weight)
+        self._moe_layers = [m for m in self.model.modules() if isinstance(m, RankMoELoRALayer)]
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         outputs = model(**inputs)
@@ -271,15 +272,11 @@ class MoEAuxLossTrainer(Trainer):
         if self.moe_entropy_loss_weight != 0.0 or self.moe_load_balance_loss_weight != 0.0:
             entropy_terms = []
             load_balance_terms = []
-            for module in model.modules():
-                if isinstance(module, RankMoELoRALayer):
-                    g = module._last_g
-                    if g is None:
-                        continue
-                    if self.moe_entropy_loss_weight != 0.0:
-                        entropy_terms.append(module.rank_entropy_loss(g))
-                    if self.moe_load_balance_loss_weight != 0.0:
-                        load_balance_terms.append(module.load_balancing_loss(g))
+            for module in self._moe_layers:
+                if self.moe_entropy_loss_weight != 0.0 and module._last_rank_entropy_loss is not None:
+                    entropy_terms.append(module._last_rank_entropy_loss)
+                if self.moe_load_balance_loss_weight != 0.0 and module._last_load_balance_loss is not None:
+                    load_balance_terms.append(module._last_load_balance_loss)
 
             if entropy_terms:
                 entropy_loss = torch.stack(entropy_terms).mean()

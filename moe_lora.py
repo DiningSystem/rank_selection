@@ -46,6 +46,7 @@ class RankMoELoRALayer(nn.Module):
         router_hidden_dim: int = 128,
         bias: bool = True,
         freeze_base: bool = True,
+        track_router_losses: bool = False,
     ) -> None:
         super().__init__()
         if r_max <= 0:
@@ -57,6 +58,7 @@ class RankMoELoRALayer(nn.Module):
         self.d_out = d_out
         self.r_max = r_max
         self.top_k = min(top_k, r_max)
+        self.track_router_losses = track_router_losses
 
         self.base = nn.Linear(d_in, d_out, bias=bias)
         if freeze_base:
@@ -78,6 +80,8 @@ class RankMoELoRALayer(nn.Module):
         self.register_buffer("rank_usage_counts", torch.zeros(r_max), persistent=False)
         self.register_buffer("routed_token_count", torch.tensor(0.0), persistent=False)
         self._last_g: Optional[torch.Tensor] = None
+        self._last_rank_entropy_loss: Optional[torch.Tensor] = None
+        self._last_load_balance_loss: Optional[torch.Tensor] = None
 
         self.reset_parameters()
 
@@ -93,6 +97,7 @@ class RankMoELoRALayer(nn.Module):
         top_k: int = 1,
         router_hidden_dim: int = 128,
         freeze_base: bool = True,
+        track_router_losses: bool = False,
     ) -> "RankMoELoRALayer":
         layer = cls(
             d_in=linear.in_features,
@@ -102,6 +107,7 @@ class RankMoELoRALayer(nn.Module):
             router_hidden_dim=router_hidden_dim,
             bias=linear.bias is not None,
             freeze_base=freeze_base,
+            track_router_losses=track_router_losses,
         )
         layer = layer.to(device=linear.weight.device, dtype=linear.weight.dtype)
         with torch.no_grad():
@@ -143,7 +149,25 @@ class RankMoELoRALayer(nn.Module):
         g_logits = self.router(router_in)
         g = F.softmax(g_logits, dim=-1)
         g = self._topk_normalize(g)
-        self._last_g = g if self.training or return_aux else None
+        entropy = None
+        load_balance = None
+        should_track_losses = self.track_router_losses or return_aux
+        if should_track_losses:
+            entropy = -(g * torch.log(g.clamp_min(1e-9))).sum(dim=-1).mean()
+            rank_probs = g.mean(dim=0)
+            uniform = torch.full_like(rank_probs, 1.0 / rank_probs.numel())
+            load_balance = torch.sum((rank_probs - uniform) ** 2)
+            if self.training and self.track_router_losses:
+                # Keep scalar losses with autograd graph; avoid retaining full routing tensor.
+                self._last_rank_entropy_loss = entropy
+                self._last_load_balance_loss = load_balance
+            else:
+                self._last_rank_entropy_loss = None
+                self._last_load_balance_loss = None
+        else:
+            self._last_rank_entropy_loss = None
+            self._last_load_balance_loss = None
+        self._last_g = g.detach() if (self.training or return_aux) else None
 
         # Efficient residual path (no ΔW materialization):
         # Ax: [batch, r_max], weighted: [batch, r_max], delta: [batch, d_out]
@@ -172,8 +196,8 @@ class RankMoELoRALayer(nn.Module):
 
         aux = {
             "rank_sparsity": self.rank_sparsity_loss(g),
-            "rank_entropy": self.rank_entropy_loss(g),
-            "load_balancing": self.load_balancing_loss(g),
+            "rank_entropy": entropy if entropy is not None else self.rank_entropy_loss(g),
+            "load_balancing": load_balance if load_balance is not None else self.load_balancing_loss(g),
             "mask_l1": self.mask_sparsity_loss(m_a, m_b),
             "avg_active_rank": self.average_active_rank(g),
             "g_distribution": g.mean(dim=0),
@@ -208,6 +232,8 @@ class RankMoELoRALayer(nn.Module):
 
     def rank_entropy_loss(self, g: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Entropy regularizer over per-token routing distribution."""
+        if g is None and self._last_rank_entropy_loss is not None:
+            return self._last_rank_entropy_loss
         g_ = self._last_g if g is None else g
         if g_ is None:
             raise RuntimeError("rank_entropy_loss requires forward pass or explicit g")
@@ -216,6 +242,8 @@ class RankMoELoRALayer(nn.Module):
 
     def load_balancing_loss(self, g: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Encourage balanced usage across routed ranks."""
+        if g is None and self._last_load_balance_loss is not None:
+            return self._last_load_balance_loss
         g_ = self._last_g if g is None else g
         if g_ is None:
             raise RuntimeError("load_balancing_loss requires forward pass or explicit g")
@@ -313,6 +341,7 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
                 top_k=config.top_k,
                 router_hidden_dim=router_hidden,
                 freeze_base=config.freeze_base,
+                track_router_losses=(config.entropy_loss_weight != 0.0 or config.load_balance_loss_weight != 0.0),
             )
             setattr(parent, target_name, wrapped)
             model.adapter_layers.add(name)
