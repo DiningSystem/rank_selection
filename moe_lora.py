@@ -46,6 +46,7 @@ class RankMoELoRALayer(nn.Module):
         router_hidden_dim: int = 128,
         bias: bool = True,
         freeze_base: bool = True,
+        track_router_losses: bool = False,
     ) -> None:
         super().__init__()
         if r_max <= 0:
@@ -57,6 +58,7 @@ class RankMoELoRALayer(nn.Module):
         self.d_out = d_out
         self.r_max = r_max
         self.top_k = min(top_k, r_max)
+        self.track_router_losses = track_router_losses
 
         self.base = nn.Linear(d_in, d_out, bias=bias)
         if freeze_base:
@@ -67,6 +69,7 @@ class RankMoELoRALayer(nn.Module):
         # Shared low-rank parameters.
         self.B = nn.Parameter(torch.empty(d_out, r_max))
         self.A = nn.Parameter(torch.empty(r_max, d_in))
+        self.rank_scale = nn.Parameter(torch.ones(r_max))
 
         # Mask logits; masks are applied per-rank-component before multiplication.
         self.S_b = nn.Parameter(torch.zeros(d_out, r_max))
@@ -77,6 +80,8 @@ class RankMoELoRALayer(nn.Module):
         self.register_buffer("rank_usage_counts", torch.zeros(r_max), persistent=False)
         self.register_buffer("routed_token_count", torch.tensor(0.0), persistent=False)
         self._last_g: Optional[torch.Tensor] = None
+        self._last_rank_entropy_loss: Optional[torch.Tensor] = None
+        self._last_load_balance_loss: Optional[torch.Tensor] = None
 
         self.reset_parameters()
 
@@ -92,6 +97,7 @@ class RankMoELoRALayer(nn.Module):
         top_k: int = 1,
         router_hidden_dim: int = 128,
         freeze_base: bool = True,
+        track_router_losses: bool = False,
     ) -> "RankMoELoRALayer":
         layer = cls(
             d_in=linear.in_features,
@@ -101,6 +107,7 @@ class RankMoELoRALayer(nn.Module):
             router_hidden_dim=router_hidden_dim,
             bias=linear.bias is not None,
             freeze_base=freeze_base,
+            track_router_losses=track_router_losses,
         )
         layer = layer.to(device=linear.weight.device, dtype=linear.weight.dtype)
         with torch.no_grad():
@@ -142,18 +149,33 @@ class RankMoELoRALayer(nn.Module):
         g_logits = self.router(router_in)
         g = F.softmax(g_logits, dim=-1)
         g = self._topk_normalize(g)
-        if return_aux:
-            self._last_g = g
-        elif self.training:
-            self._last_g = g.detach()
+        entropy = None
+        load_balance = None
+        should_track_losses = self.track_router_losses or return_aux
+        if should_track_losses:
+            entropy = -(g * torch.log(g.clamp_min(1e-9))).sum(dim=-1).mean()
+            rank_probs = g.mean(dim=0)
+            uniform = torch.full_like(rank_probs, 1.0 / rank_probs.numel())
+            load_balance = torch.sum((rank_probs - uniform) ** 2)
+            if self.training and self.track_router_losses:
+                # Keep scalar losses with autograd graph; avoid retaining full routing tensor.
+                self._last_rank_entropy_loss = entropy
+                self._last_load_balance_loss = load_balance
+            else:
+                self._last_rank_entropy_loss = None
+                self._last_load_balance_loss = None
         else:
-            self._last_g = None
+            self._last_rank_entropy_loss = None
+            self._last_load_balance_loss = None
+        self._last_g = g.detach() if (self.training or return_aux) else None
 
         # Efficient residual path (no ΔW materialization):
         # Ax: [batch, r_max], weighted: [batch, r_max], delta: [batch, d_out]
         ax_in = x_2d if x_2d.dtype == a_tilde.dtype else x_2d.to(a_tilde.dtype)
         ax = F.linear(ax_in, a_tilde)
         weighted = g.to(ax.dtype) * ax
+        rank_scale = self.rank_scale.to(weighted.dtype).view(1, -1)
+        weighted = weighted * rank_scale
         if weighted.dtype != b_tilde.dtype:
             weighted = weighted.to(b_tilde.dtype)
         delta = F.linear(weighted, b_tilde)
@@ -174,6 +196,8 @@ class RankMoELoRALayer(nn.Module):
 
         aux = {
             "rank_sparsity": self.rank_sparsity_loss(g),
+            "rank_entropy": entropy if entropy is not None else self.rank_entropy_loss(g),
+            "load_balancing": load_balance if load_balance is not None else self.load_balancing_loss(g),
             "mask_l1": self.mask_sparsity_loss(m_a, m_b),
             "avg_active_rank": self.average_active_rank(g),
             "g_distribution": g.mean(dim=0),
@@ -206,6 +230,27 @@ class RankMoELoRALayer(nn.Module):
         denom = torch.clamp(self.routed_token_count, min=1.0)
         return self.rank_usage_counts / denom
 
+    def rank_entropy_loss(self, g: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Entropy regularizer over per-token routing distribution."""
+        if g is None and self._last_rank_entropy_loss is not None:
+            return self._last_rank_entropy_loss
+        g_ = self._last_g if g is None else g
+        if g_ is None:
+            raise RuntimeError("rank_entropy_loss requires forward pass or explicit g")
+        entropy = -(g_ * torch.log(g_.clamp_min(1e-9))).sum(dim=-1)
+        return entropy.mean()
+
+    def load_balancing_loss(self, g: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Encourage balanced usage across routed ranks."""
+        if g is None and self._last_load_balance_loss is not None:
+            return self._last_load_balance_loss
+        g_ = self._last_g if g is None else g
+        if g_ is None:
+            raise RuntimeError("load_balancing_loss requires forward pass or explicit g")
+        rank_probs = g_.mean(dim=0)
+        uniform = torch.full_like(rank_probs, 1.0 / rank_probs.numel())
+        return torch.sum((rank_probs - uniform) ** 2)
+
     def debug_rank1_equivalence(self) -> torch.Tensor:
         a_tilde, b_tilde, _, _ = self.masked_factors()
         delta_direct = b_tilde @ a_tilde
@@ -219,6 +264,8 @@ class MoELoRAConfig:
     r_max: Optional[int] = None
     top_k: int = 1
     router_hidden_dim: Optional[int] = None
+    entropy_loss_weight: float = 0.0
+    load_balance_loss_weight: float = 0.0
     target_modules: Optional[Sequence[str]] = None
     freeze_base: bool = True
 
@@ -255,40 +302,60 @@ def mark_only_moe_lora_as_trainable(self):
                 param.requires_grad = True
 
 
-def _with_prefix(state_dict: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
-    return {f"{prefix}{k}": v for k, v in state_dict.items()}
-
-
-def _strip_prefix(state_dict: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
-    return {k[len(prefix):]: v for k, v in state_dict.items() if k.startswith(prefix)}
-
-
 def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], strict: bool = True):
-    """Load state dict while handling optional leading `model.` prefix mismatch."""
-    try:
-        return self.load_state_dict(state_dict, strict=strict)
-    except RuntimeError as err:
-        model_keys = set(self.state_dict().keys())
-        has_model_prefix = any(k.startswith("model.") for k in state_dict.keys())
+    """Load state dict with compatibility across common HF/PEFT key namespaces."""
+    model_keys = set(self.state_dict().keys())
 
-        candidates = []
-        if has_model_prefix:
-            candidates.append(_strip_prefix(state_dict, "model."))
-        else:
-            candidates.append(_with_prefix(state_dict, "model."))
+    def _strip_prefix(prefix: str, src: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        out = {}
+        for k, v in src.items():
+            if k.startswith(prefix):
+                out[k[len(prefix):]] = v
+            else:
+                out[k] = v
+        return out
 
-        for candidate in candidates:
-            if not candidate:
-                continue
-            overlap = len(model_keys.intersection(candidate.keys()))
-            if overlap == 0:
-                continue
-            return self.load_state_dict(candidate, strict=strict)
-        raise err
+    def _add_model_prefix_backbone_only(src: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        out = {}
+        for k, v in src.items():
+            if k.startswith(("layers.", "embed_tokens.", "norm.")):
+                out[f"model.{k}"] = v
+            else:
+                out[k] = v
+        return out
+
+    candidates = [
+        state_dict,
+        _strip_prefix("base_model.model.", state_dict),
+        _strip_prefix("base_model.", state_dict),
+        _strip_prefix("model.", state_dict),
+        _add_model_prefix_backbone_only(state_dict),
+    ]
+
+    best_candidate = None
+    best_overlap = -1
+    for candidate in candidates:
+        overlap = len(model_keys.intersection(candidate.keys()))
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_candidate = candidate
+
+    if best_candidate is None or best_overlap <= 0:
+        raise RuntimeError(
+            "Failed to align checkpoint keys with model keys while loading MoE checkpoint. "
+            "Please verify checkpoint format and base model compatibility."
+        )
+
+    if best_overlap < int(0.5 * len(model_keys)):
+        print(
+            f"[moe_lora] Warning: low checkpoint/model key overlap ({best_overlap}/{len(model_keys)}). "
+            "Loading may be incomplete and can degrade eval quality."
+        )
+    return self.load_state_dict(best_candidate, strict=strict)
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
-    """Save MoE checkpoint in eval-compatible key namespace."""
+    """Save MoE checkpoint using standard Hugging Face `save_pretrained` format."""
     state_dict = self.state_dict()
     return self._moe_original_save_pretrained(save_directory, state_dict=state_dict, **kwargs)
 
@@ -321,6 +388,7 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
                 top_k=config.top_k,
                 router_hidden_dim=router_hidden,
                 freeze_base=config.freeze_base,
+                track_router_losses=(config.entropy_loss_weight != 0.0 or config.load_balance_loss_weight != 0.0),
             )
             setattr(parent, target_name, wrapped)
             model.adapter_layers.add(name)
