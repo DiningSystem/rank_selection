@@ -102,6 +102,10 @@ class HFMoEBackend:
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        # Important for batched generation when pad_token_id==eos_token_id:
+        # right-padding can place eos at sequence end for shorter prompts and trigger
+        # premature stop. Left-padding keeps the final token as real prompt content.
+        self.tokenizer.padding_side = "left"
         self.max_context_len = int(getattr(self.model.config, "max_position_embeddings", 4096))
         if getattr(self.tokenizer, "model_max_length", 0) < self.max_context_len:
             self.tokenizer.model_max_length = self.max_context_len

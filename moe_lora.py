@@ -303,34 +303,55 @@ def mark_only_moe_lora_as_trainable(self):
 
 
 def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], strict: bool = True):
-    """Load state dict with lightweight compatibility for optional `model.` prefix."""
-    try:
-        return self.load_state_dict(state_dict, strict=strict)
-    except RuntimeError as err:
-        model_keys = set(self.state_dict().keys())
-        has_model_prefix = any(k.startswith("model.") for k in state_dict.keys())
+    """Load state dict with compatibility across common HF/PEFT key namespaces."""
+    model_keys = set(self.state_dict().keys())
 
-        if has_model_prefix:
-            # Mixed-format checkpoints are common (e.g., `lm_head.weight` without `model.` prefix).
-            # Strip `model.` where present while preserving top-level keys as-is.
-            candidate = {}
-            for k, v in state_dict.items():
-                if k.startswith("model."):
-                    candidate[k[len("model."):]] = v
-                else:
-                    candidate[k] = v
-        else:
-            # Add `model.` only to backbone keys; keep top-level heads unchanged.
-            candidate = {}
-            for k, v in state_dict.items():
-                if k.startswith(("layers.", "embed_tokens.", "norm.")):
-                    candidate[f"model.{k}"] = v
-                else:
-                    candidate[k] = v
+    def _strip_prefix(prefix: str, src: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        out = {}
+        for k, v in src.items():
+            if k.startswith(prefix):
+                out[k[len(prefix):]] = v
+            else:
+                out[k] = v
+        return out
 
-        if candidate and model_keys.intersection(candidate.keys()):
-            return self.load_state_dict(candidate, strict=strict)
-        raise err
+    def _add_model_prefix_backbone_only(src: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        out = {}
+        for k, v in src.items():
+            if k.startswith(("layers.", "embed_tokens.", "norm.")):
+                out[f"model.{k}"] = v
+            else:
+                out[k] = v
+        return out
+
+    candidates = [
+        state_dict,
+        _strip_prefix("base_model.model.", state_dict),
+        _strip_prefix("base_model.", state_dict),
+        _strip_prefix("model.", state_dict),
+        _add_model_prefix_backbone_only(state_dict),
+    ]
+
+    best_candidate = None
+    best_overlap = -1
+    for candidate in candidates:
+        overlap = len(model_keys.intersection(candidate.keys()))
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_candidate = candidate
+
+    if best_candidate is None or best_overlap <= 0:
+        raise RuntimeError(
+            "Failed to align checkpoint keys with model keys while loading MoE checkpoint. "
+            "Please verify checkpoint format and base model compatibility."
+        )
+
+    if best_overlap < int(0.5 * len(model_keys)):
+        print(
+            f"[moe_lora] Warning: low checkpoint/model key overlap ({best_overlap}/{len(model_keys)}). "
+            "Loading may be incomplete and can degrade eval quality."
+        )
+    return self.load_state_dict(best_candidate, strict=strict)
 
 
 def save_moe_pretrained(self, save_directory: str, **kwargs):
