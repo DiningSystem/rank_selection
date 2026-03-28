@@ -119,8 +119,6 @@ class HFMoEBackend:
             truncation=True,
             max_length=input_len,
         ).to(self.device)
-        if "attention_mask" in inputs and inputs["attention_mask"].dtype is not torch.bool:
-            inputs["attention_mask"] = inputs["attention_mask"].bool()
         do_sample = float(getattr(sampling_params, "temperature", 0.0)) > 0.0
         output_len = int(getattr(sampling_params, "max_tokens", 256)) if max_new_tokens is None else int(max_new_tokens)
         use_cache_flag = self.use_cache if use_cache is None else bool(use_cache)
@@ -165,7 +163,7 @@ class HFMoEBackend:
             if len(prompts) <= 1:
                 prompt = prompts[0]
                 base_new_tokens = int(getattr(sampling_params, "max_tokens", 256))
-                # First fallback: keep generation length unchanged, only disable cache.
+                # Accuracy-first fallback: keep context/output budgets unchanged.
                 try:
                     if self.device.startswith("cuda"):
                         torch.cuda.empty_cache()
@@ -179,45 +177,11 @@ class HFMoEBackend:
                 except RuntimeError as nested_exc:
                     if "out of memory" not in str(nested_exc).lower():
                         raise
-                # Second fallback: gradually reduce input length while preserving output budget.
-                fallback_input_lens = [
-                    max(2048, self.max_context_len // 2),
-                    max(1024, self.max_context_len // 4),
-                    max(512, self.max_context_len // 8),
-                ]
-                for max_in in fallback_input_lens:
-                    try:
-                        if self.device.startswith("cuda"):
-                            torch.cuda.empty_cache()
-                        return self._generate_once(
-                            [prompt],
-                            sampling_params,
-                            max_input_len=max_in,
-                            max_new_tokens=base_new_tokens,
-                            use_cache=False,
-                        )
-                    except RuntimeError as nested_exc:
-                        if "out of memory" not in str(nested_exc).lower():
-                            raise
-                # Final fallback: reduce new tokens only as a last resort.
-                fallback_new_tokens = [max(256, base_new_tokens // 2), max(128, base_new_tokens // 4), max(64, base_new_tokens // 8)]
-                for max_out in fallback_new_tokens:
-                    try:
-                        if self.device.startswith("cuda"):
-                            torch.cuda.empty_cache()
-                        return self._generate_once(
-                            [prompt],
-                            sampling_params,
-                            max_input_len=max(512, self.max_context_len // 8),
-                            max_new_tokens=max_out,
-                            use_cache=False,
-                        )
-                    except RuntimeError as nested_exc:
-                        if "out of memory" not in str(nested_exc).lower():
-                            raise
                 raise RuntimeError(
                     "CUDA OOM while generating a single prompt in HF MoE backend even after "
-                    "automatic backoff on input length and max_new_tokens."
+                    "retrying with use_cache=False and full generation budgets preserved. "
+                    "For deterministic eval correctness, this path no longer auto-truncates "
+                    "input/new-token limits."
                 ) from exc
             mid = max(1, len(prompts) // 2)
             left = self.generate(prompts[:mid], sampling_params)
