@@ -10,9 +10,11 @@ from transformers import (
     BitsAndBytesConfig,
     AutoModelForSequenceClassification,
     AutoModelForSeq2SeqLM,
+    Trainer,
 )
 from abba import ABBAConfig, get_abba_model
 from moe_lora import MoELoRAConfig, get_moe_lora_model
+from moe_lora import RankMoELoRALayer
 from datasets import load_dataset
 import numpy as np
 from peft import (
@@ -216,6 +218,8 @@ def create_peft_model_it_moe_lora(model, args):
         r_max=args.moe_r_max if args.moe_r_max > 0 else None,
         top_k=args.moe_top_k,
         router_hidden_dim=router_hidden_dim,
+        entropy_loss_weight=args.moe_entropy_loss_weight,
+        load_balance_loss_weight=args.moe_load_balance_loss_weight,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
     )
@@ -235,6 +239,8 @@ def create_peft_model_cr_moe_lora(model, args):
         r_max=args.moe_r_max if args.moe_r_max > 0 else None,
         top_k=args.moe_top_k,
         router_hidden_dim=router_hidden_dim,
+        entropy_loss_weight=args.moe_entropy_loss_weight,
+        load_balance_loss_weight=args.moe_load_balance_loss_weight,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
     )
@@ -245,3 +251,38 @@ def create_peft_model_cr_moe_lora(model, args):
     if trainable_params == 0:
         raise RuntimeError("MoE-LoRA setup produced zero trainable parameters.")
     return model, moe_config
+
+
+class MoEAuxLossTrainer(Trainer):
+    """Trainer with optional MoE routing regularizers."""
+
+    def __init__(self, *args, moe_entropy_loss_weight: float = 0.0, moe_load_balance_loss_weight: float = 0.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.moe_entropy_loss_weight = float(moe_entropy_loss_weight)
+        self.moe_load_balance_loss_weight = float(moe_load_balance_loss_weight)
+        self._moe_layers = [m for m in self.model.modules() if isinstance(m, RankMoELoRALayer)]
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        outputs = model(**inputs)
+        if isinstance(outputs, dict):
+            loss = outputs["loss"]
+        else:
+            loss = outputs.loss
+
+        if self.moe_entropy_loss_weight != 0.0 or self.moe_load_balance_loss_weight != 0.0:
+            entropy_terms = []
+            load_balance_terms = []
+            for module in self._moe_layers:
+                if self.moe_entropy_loss_weight != 0.0 and module._last_rank_entropy_loss is not None:
+                    entropy_terms.append(module._last_rank_entropy_loss)
+                if self.moe_load_balance_loss_weight != 0.0 and module._last_load_balance_loss is not None:
+                    load_balance_terms.append(module._last_load_balance_loss)
+
+            if entropy_terms:
+                entropy_loss = torch.stack(entropy_terms).mean()
+                loss = loss + self.moe_entropy_loss_weight * entropy_loss
+            if load_balance_terms:
+                load_balance_loss = torch.stack(load_balance_terms).mean()
+                loss = loss + self.moe_load_balance_loss_weight * load_balance_loss
+
+        return (loss, outputs) if return_outputs else loss

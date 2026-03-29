@@ -96,7 +96,7 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     print('length ====', len(gsm8k_ins))
     batch_gsm8k_ins = batch_data(gsm8k_ins, batch_size=batch_size)
 
-    stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
+    stop_tokens = ["\n### Instruction:", "\n### Response:"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
@@ -105,11 +105,13 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
 
     # First loop - generation
     print("\nGenerating responses...")
-    for idx, (prompt, prompt_answer) in enumerate(
-        tqdm(zip(batch_gsm8k_ins, gsm8k_answers), 
-            total=len(batch_gsm8k_ins), 
+    for idx, prompt in enumerate(
+        tqdm(
+            batch_gsm8k_ins,
+            total=len(batch_gsm8k_ins),
             desc="Generating responses",
-            ncols=100)
+            ncols=100,
+        )
     ):
         if isinstance(prompt, list):
             pass
@@ -133,8 +135,6 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     ):
         doc = {'question': prompt}
         y_pred = extract_answer_number(completion)
-        print("completion ====", completion)
-        print("y_pred ====", y_pred)
         if y_pred is not None:
             result.append(float(y_pred) == float(prompt_answer) or math_equal(y_pred, prompt_answer))
         else:
