@@ -21,8 +21,8 @@ elif os.path.exists(single_path):
     keys = set(load_file(single_path).keys())
 
 has_lm_head = "lm_head.weight" in keys
-has_embed = ("model.embed_tokens.weight" in keys) or ("embed_tokens.weight" in keys)
-has_norm = ("model.norm.weight" in keys) or ("norm.weight" in keys)
+has_embed = "model.embed_tokens.weight" in keys
+has_norm = "model.norm.weight" in keys
 sys.exit(0 if (has_lm_head and has_embed and has_norm) else 1)
 PY
 }
