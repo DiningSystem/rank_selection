@@ -29,24 +29,33 @@ def remove_boxed(s):
 
 
 def process_results(doc, completion, answer):
+    candidates = []
     split_ans = completion.split('The answer is: ')
     if len(split_ans) > 1:
         ans = split_ans[-1]
-        extract_ans_temp = ans.split('.\n')[0]
-        extract_ans_temp = extract_ans_temp.strip()
-        if len(extract_ans_temp)>0 and extract_ans_temp[-1] == '.':
-            extract_ans = extract_ans_temp[0:-1]
-        else:
-            extract_ans = extract_ans_temp
-        extract_ans = extract_ans.strip()
-        if utils.is_equiv(extract_ans, answer):
+        extract_ans_temp = ans.split('.\n')[0].strip()
+        if len(extract_ans_temp) > 0 and extract_ans_temp[-1] == '.':
+            extract_ans_temp = extract_ans_temp[:-1]
+        candidates.append(extract_ans_temp.strip())
+
+    boxed = utils.last_boxed_only_string(completion)
+    if boxed is not None:
+        boxed_content = remove_boxed(boxed)
+        if boxed_content:
+            candidates.append(boxed_content.strip())
+
+    # Fallback: use the last non-empty line as a candidate answer.
+    lines = [line.strip() for line in completion.splitlines() if line.strip()]
+    if lines:
+        candidates.append(lines[-1].rstrip("."))
+
+    for cand in candidates:
+        if cand and utils.is_equiv(cand, answer):
             return True
-        else:
-            return False
-    else:
-        temp = {'question': doc, 'output': completion, 'answer': answer}
-        invalid_outputs.append(temp)
-        return False
+
+    temp = {'question': doc, 'output': completion, 'answer': answer}
+    invalid_outputs.append(temp)
+    return False
 
 
 def batch_data(data_list, batch_size=1):

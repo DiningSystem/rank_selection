@@ -33,13 +33,17 @@ is_adaptive_checkpoint() {
 import json
 import os
 import sys
+from safetensors.torch import load_file
 
 path = sys.argv[1]
 index_path = os.path.join(path, "model.safetensors.index.json")
+single_path = os.path.join(path, "model.safetensors")
 keys = []
 if os.path.exists(index_path):
     with open(index_path, "r") as f:
         keys = list(json.load(f).get("weight_map", {}).keys())
+elif os.path.exists(single_path):
+    keys = list(load_file(single_path).keys())
 print("1" if (any(k.endswith(".A") or k.endswith(".B") for k in keys) and any(".base.weight" in k for k in keys)) else "0")
 PY
 }

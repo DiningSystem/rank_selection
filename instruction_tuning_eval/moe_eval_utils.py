@@ -72,6 +72,7 @@ class VLLMBackend:
 
 class HFMoEBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None):
+        print(f"[moe_eval_utils] Initializing HFMoEBackend with model_path={model_path}")
         base_model_name = _resolve_base_model_name(model_path)
         r_max = _infer_r_max(model_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -191,11 +192,14 @@ class HFMoEBackend:
 
 def create_generation_backend(model_path: str, tokenizer_path: str | None, tensor_parallel_size: int, backend: str = "auto"):
     if backend == "vllm":
+        print("[moe_eval_utils] Using generation backend: vllm (forced)")
         return VLLMBackend(model_path, tokenizer_path, tensor_parallel_size)
     if backend == "hf_moe":
+        print("[moe_eval_utils] Using generation backend: hf_moe (forced)")
         return HFMoEBackend(model_path, tokenizer_path)
 
     if is_adaptive_moe_checkpoint(model_path):
         print("[moe_eval_utils] Detected adaptive MoE checkpoint; using HF MoE backend for eval.")
         return HFMoEBackend(model_path, tokenizer_path)
+    print("[moe_eval_utils] Using generation backend: vllm (auto)")
     return VLLMBackend(model_path, tokenizer_path, tensor_parallel_size)
