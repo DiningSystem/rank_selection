@@ -19,6 +19,7 @@ class RankRouter(nn.Module):
     def __init__(self, d_model: int, r_max: int, hidden_dim: int) -> None:
         super().__init__()
         self.net = nn.Sequential(
+            nn.LayerNorm(d_model),
             nn.Linear(d_model, hidden_dim),
             nn.GELU(),
             nn.Linear(hidden_dim, r_max),
