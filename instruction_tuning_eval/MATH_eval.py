@@ -32,14 +32,22 @@ def remove_boxed(s):
 def process_results(doc, completion, answer):
     candidates = []
 
-    # Extract explicit final answer markers, handling minor format variations.
-    explicit_markers = re.findall(r"the answer is\s*[:：]\s*(.*)", completion, flags=re.IGNORECASE)
-    for marker in explicit_markers:
-        extract_ans_temp = marker.split("\n")[0].strip()
-        if extract_ans_temp.endswith("."):
-            extract_ans_temp = extract_ans_temp[:-1]
-        if extract_ans_temp:
-            candidates.append(extract_ans_temp.strip())
+    marker_patterns = [
+        r"the answer is\s*[:：]\s*(.*)",
+        r"final answer\s*[:：]\s*(.*)",
+        r"answer\s*[:：]\s*(.*)",
+    ]
+    for pattern in marker_patterns:
+        for marker in re.findall(pattern, completion, flags=re.IGNORECASE):
+            extract_ans_temp = marker.split("\n")[0].strip().rstrip(".")
+            if extract_ans_temp:
+                candidates.append(extract_ans_temp)
+
+    # Consider every boxed candidate, not just the final one.
+    boxed_matches = re.findall(r"\\(?:boxed|fbox)\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}", completion)
+    for boxed_content in boxed_matches:
+        if boxed_content:
+            candidates.append(boxed_content.strip())
 
     boxed = utils.last_boxed_only_string(completion)
     if boxed is not None:
@@ -47,7 +55,6 @@ def process_results(doc, completion, answer):
         if boxed_content:
             candidates.append(boxed_content.strip())
 
-    # Fallback: use the last non-empty line as a candidate answer.
     lines = [line.strip() for line in completion.splitlines() if line.strip()]
     if lines:
         candidates.append(lines[-1].rstrip("."))
@@ -95,9 +102,9 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     print('sampleing =====', sampling_params)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
     res_completions = []
-    for idx, (prompt, prompt_answer) in enumerate(
+    for idx, prompt in enumerate(
         tqdm(
-            zip(batch_hendrycks_math_ins, hendrycks_math_answers),
+            batch_hendrycks_math_ins,
             total=len(batch_hendrycks_math_ins),
             desc="Generating responses...",
             ncols=100,
