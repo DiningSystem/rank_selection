@@ -1,3 +1,3 @@
 mistral-7b/
 experiments/
-#data/commonsense/commonsense_170k.json
+data/commonsense/commonsense_170k.json
