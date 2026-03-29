@@ -69,8 +69,6 @@ class RankMoELoRALayer(nn.Module):
         # Shared low-rank parameters.
         self.B = nn.Parameter(torch.empty(d_out, r_max))
         self.A = nn.Parameter(torch.empty(r_max, d_in))
-        self.rank_scale = nn.Parameter(torch.ones(r_max))
-
         # Mask logits; masks are applied per-rank-component before multiplication.
         self.S_b = nn.Parameter(torch.zeros(d_out, r_max))
         self.S_a = nn.Parameter(torch.zeros(r_max, d_in))
@@ -174,8 +172,6 @@ class RankMoELoRALayer(nn.Module):
         ax_in = x_2d if x_2d.dtype == a_tilde.dtype else x_2d.to(a_tilde.dtype)
         ax = F.linear(ax_in, a_tilde)
         weighted = g.to(ax.dtype) * ax
-        rank_scale = self.rank_scale.to(weighted.dtype).view(1, -1)
-        weighted = weighted * rank_scale
         if weighted.dtype != b_tilde.dtype:
             weighted = weighted.to(b_tilde.dtype)
         delta = F.linear(weighted, b_tilde)
@@ -324,12 +320,15 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
                 out[k] = v
         return out
 
+    def _drop_legacy_rank_scale(src: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        return {k: v for k, v in src.items() if not k.endswith(".rank_scale")}
+
     candidates = [
-        state_dict,
-        _strip_prefix("base_model.model.", state_dict),
-        _strip_prefix("base_model.", state_dict),
-        _strip_prefix("model.", state_dict),
-        _add_model_prefix_backbone_only(state_dict),
+        _drop_legacy_rank_scale(state_dict),
+        _drop_legacy_rank_scale(_strip_prefix("base_model.model.", state_dict)),
+        _drop_legacy_rank_scale(_strip_prefix("base_model.", state_dict)),
+        _drop_legacy_rank_scale(_strip_prefix("model.", state_dict)),
+        _drop_legacy_rank_scale(_add_model_prefix_backbone_only(state_dict)),
     ]
 
     best_candidate = None
