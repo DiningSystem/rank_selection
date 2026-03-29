@@ -99,7 +99,8 @@ def finetune():
     wandb.log({"total_params": total_params, "classifier_params": classifier_params, "non_classifier_params": non_classifier_params})
 
     # Setup optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    trainable_parameters = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_parameters, lr=args.lr)
 
     if args.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -126,6 +127,9 @@ def finetune():
         logging_first_step=True,
         logging_dir=os.path.join(run_dir, "logs"),
         gradient_checkpointing=args.gradient_checkpointing,
+        dataloader_num_workers=args.dataloader_num_workers,
+        group_by_length=True,
+        remove_unused_columns=False,
     )
     
     # Save training arguments
@@ -133,11 +137,13 @@ def finetune():
     with open(training_args_path, 'w') as f:
         json.dump(training_args.to_dict(), f, indent=4)
     
-    trainer = Trainer(
+    trainer = MoEAuxLossTrainer(
         model=model,
         args=training_args,
         **data_module,
         optimizers=(optimizer, None),
+        moe_entropy_loss_weight=args.moe_entropy_loss_weight,
+        moe_load_balance_loss_weight=args.moe_load_balance_loss_weight,
     )
 
     # Save tokenizer
@@ -178,6 +184,8 @@ if __name__ == "__main__":
     parser.add_argument("--moe_r_max", type=int, default=32, help="Rank-MoE maximum rank components (r_max)")
     parser.add_argument("--moe_top_k", type=int, default=1, help="Top-k routed experts per token for MoE-LoRA")
     parser.add_argument("--moe_router_hidden_dim", type=int, default=128, help="Hidden dim for router MLP (set 0 for linear router)")
+    parser.add_argument("--moe_entropy_loss_weight", type=float, default=0.0, help="Weight for MoE routing entropy regularizer")
+    parser.add_argument("--moe_load_balance_loss_weight", type=float, default=0.0, help="Weight for MoE rank load balancing regularizer")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
     parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="cosine", help="Learning rate scheduler")
@@ -187,6 +195,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
+    parser.add_argument("--dataloader_num_workers", type=int, default=4, help="DataLoader worker count for faster input pipeline")
         
     args = parser.parse_args()
 
