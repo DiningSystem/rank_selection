@@ -57,6 +57,41 @@ def _infer_r_max(model_path: str, fallback: int = 32) -> int:
     return int(fallback)
 
 
+def _read_json_if_exists(path: str):
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top_k: int = 1, fallback_router_hidden: int = 128):
+    state_dict = load_moe_checkpoint_state_dict(model_path)
+    r_max = int(fallback_r_max)
+    router_hidden_dim = int(fallback_router_hidden)
+    for k, v in state_dict.items():
+        if k.endswith(".A") and getattr(v, "ndim", 0) >= 2:
+            r_max = int(v.shape[0])
+            break
+    for k, v in state_dict.items():
+        if k.endswith("router.net.0.weight") and getattr(v, "ndim", 0) >= 2:
+            router_hidden_dim = int(v.shape[0])
+            break
+
+    top_k = int(fallback_top_k)
+    config_paths = [
+        os.path.join(model_path, "config.json"),
+        os.path.join(os.path.dirname(model_path), "config.json"),
+    ]
+    for config_path in config_paths:
+        cfg = _read_json_if_exists(config_path)
+        if "moe_top_k" in cfg:
+            top_k = int(cfg["moe_top_k"])
+            break
+    top_k = int(os.getenv("HF_MOE_TOP_K", str(top_k)))
+    router_hidden_dim = int(os.getenv("HF_MOE_ROUTER_HIDDEN_DIM", str(router_hidden_dim)))
+    return r_max, top_k, router_hidden_dim
+
+
 class VLLMBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None, tensor_parallel_size: int):
         self.llm = LLM(
@@ -74,7 +109,8 @@ class HFMoEBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None):
         print(f"[moe_eval_utils] Initializing HFMoEBackend with model_path={model_path}")
         base_model_name = _resolve_base_model_name(model_path)
-        r_max = _infer_r_max(model_path)
+        r_max, moe_top_k, router_hidden_dim = _resolve_moe_hparams(model_path)
+        print(f"[moe_eval_utils] Resolved MoE hparams: r_max={r_max}, top_k={moe_top_k}, router_hidden_dim={router_hidden_dim}")
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         if self.device.startswith("cuda"):
             torch.backends.cuda.matmul.allow_tf32 = True
@@ -86,8 +122,8 @@ class HFMoEBackend:
         moe_config = MoELoRAConfig(
             experts_config=[{"rank": r_max}],
             r_max=r_max,
-            top_k=1,
-            router_hidden_dim=128,
+            top_k=moe_top_k,
+            router_hidden_dim=router_hidden_dim,
             target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
             freeze_base=True,
         )

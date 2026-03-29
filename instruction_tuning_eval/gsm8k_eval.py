@@ -96,7 +96,7 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     print('length ====', len(gsm8k_ins))
     batch_gsm8k_ins = batch_data(gsm8k_ins, batch_size=batch_size)
 
-    stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
+    stop_tokens = ["\n### Instruction:", "\n### Response:"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)

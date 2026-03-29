@@ -39,6 +39,29 @@ def _infer_r_max(checkpoint_dir: str, fallback_r_max: int) -> int:
     return int(fallback_r_max)
 
 
+def _infer_router_hidden_dim(checkpoint_dir: str, fallback_hidden: int) -> int:
+    state_dict = load_moe_checkpoint_state_dict(checkpoint_dir)
+    for key, value in state_dict.items():
+        if key.endswith("router.net.0.weight") and value.ndim >= 2:
+            return int(value.shape[0])
+    return int(fallback_hidden)
+
+
+def _resolve_moe_top_k(checkpoint_dir: str, fallback_top_k: int) -> int:
+    candidate_paths = [
+        os.path.join(checkpoint_dir, "config.json"),
+        os.path.join(os.path.dirname(checkpoint_dir), "config.json"),
+    ]
+    for config_path in candidate_paths:
+        if not os.path.exists(config_path):
+            continue
+        with open(config_path, "r") as f:
+            cfg = json.load(f)
+        if "moe_top_k" in cfg:
+            return int(cfg["moe_top_k"])
+    return int(fallback_top_k)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Prepare eval-ready full MoE model from base model + MoE checkpoint.")
     parser.add_argument("--checkpoint_dir", required=True, help="Path to MoE checkpoint directory (e.g., run/final_model)")
@@ -53,10 +76,14 @@ def main():
 
     base_model_name = _resolve_base_model(args.checkpoint_dir, args.base_model)
     inferred_r_max = _infer_r_max(args.checkpoint_dir, args.moe_r_max)
-    router_hidden_dim = args.moe_router_hidden_dim if args.moe_router_hidden_dim > 0 else None
+    resolved_top_k = _resolve_moe_top_k(args.checkpoint_dir, args.moe_top_k)
+    resolved_router_hidden = _infer_router_hidden_dim(args.checkpoint_dir, args.moe_router_hidden_dim)
+    router_hidden_dim = resolved_router_hidden if resolved_router_hidden > 0 else None
 
     print(f"[prepare_moe_eval_model] Base model: {base_model_name}")
     print(f"[prepare_moe_eval_model] Inferred r_max: {inferred_r_max}")
+    print(f"[prepare_moe_eval_model] Resolved top_k: {resolved_top_k}")
+    print(f"[prepare_moe_eval_model] Resolved router_hidden_dim: {router_hidden_dim}")
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
@@ -67,7 +94,7 @@ def main():
     moe_config = MoELoRAConfig(
         experts_config=[{"rank": inferred_r_max}],
         r_max=inferred_r_max,
-        top_k=args.moe_top_k,
+        top_k=resolved_top_k,
         router_hidden_dim=router_hidden_dim,
         target_modules=TARGET_MODULES,
         freeze_base=True,

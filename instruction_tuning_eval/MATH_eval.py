@@ -33,24 +33,14 @@ def process_results(doc, completion, answer):
     split_ans = completion.split('The answer is: ')
     if len(split_ans) > 1:
         ans = split_ans[-1]
-        extract_ans_temp = ans.split('.\n')[0].strip()
+        extract_ans_temp = ans.split('.\n')[0]
+        extract_ans_temp = extract_ans_temp.strip()
         if len(extract_ans_temp) > 0 and extract_ans_temp[-1] == '.':
-            extract_ans_temp = extract_ans_temp[:-1]
-        candidates.append(extract_ans_temp.strip())
-
-    boxed = utils.last_boxed_only_string(completion)
-    if boxed is not None:
-        boxed_content = remove_boxed(boxed)
-        if boxed_content:
-            candidates.append(boxed_content.strip())
-
-    # Fallback: use the last non-empty line as a candidate answer.
-    lines = [line.strip() for line in completion.splitlines() if line.strip()]
-    if lines:
-        candidates.append(lines[-1].rstrip("."))
-
-    for cand in candidates:
-        if cand and utils.is_equiv(cand, answer):
+            extract_ans = extract_ans_temp[0:-1]
+        else:
+            extract_ans = extract_ans_temp
+        extract_ans = extract_ans.strip()
+        if utils.is_equiv(extract_ans, answer):
             return True
 
     temp = {'question': doc, 'output': completion, 'answer': answer}
@@ -92,9 +82,9 @@ def test_hendrycks_math(model, data_path, start=0, end=MAX_INT, batch_size=1, te
     print('sampleing =====', sampling_params)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
     res_completions = []
-    for idx, prompt in enumerate(
+    for idx, (prompt, prompt_answer) in enumerate(
         tqdm(
-            batch_hendrycks_math_ins,
+            zip(batch_hendrycks_math_ins, hendrycks_math_answers),
             total=len(batch_hendrycks_math_ins),
             desc="Generating responses...",
             ncols=100,
