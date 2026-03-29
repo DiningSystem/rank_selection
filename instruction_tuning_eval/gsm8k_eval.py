@@ -2,7 +2,7 @@ import argparse
 import json
 import re
 import jsonlines
-from fraction import Fraction
+from fractions import Fraction
 from vllm import SamplingParams
 import sys
 import torch
@@ -33,33 +33,61 @@ def is_number(s):
     return False
 
 
-def extract_answer_number(completion):
-    text = completion.split('The answer is: ')
-    if len(text) > 1:
-        extract_ans = text[-1].strip()
-        match = re.search(r'[\-+]?\d*[\.,/]?\d+', extract_ans)
-        if match:
-            if '/' in match.group():
-                denominator = match.group().split('/')[1]
-                numerator = match.group().split('/')[0]
-                if is_number(denominator) == True and is_number(numerator) == True:
-                    if denominator == '0':
-                        return round(float(numerator.replace(',', '')))
-                    else:
-                        frac = Fraction(match.group().replace(',', ''))
-                        num_numerator = frac.numerator
-                        num_denominator = frac.denominator
-                        return round(float(num_numerator / num_denominator))
-                else:
-                    return None
-            else:
-                if float(match.group().replace(',', '')) == float('inf'):
-                    return None
-                return round(float(match.group().replace(',', '')))
-        else:
-            return None
-    else:
+def _parse_numeric_token(token):
+    token = token.strip().rstrip(".,")
+    if not token:
         return None
+    if '/' in token:
+        denominator = token.split('/')[-1]
+        numerator = token.split('/')[0]
+        if is_number(denominator) and is_number(numerator):
+            if denominator == '0':
+                return round(float(numerator.replace(',', '')))
+            frac = Fraction(token.replace(',', ''))
+            return round(float(frac.numerator / frac.denominator))
+        return None
+
+    numeric = float(token.replace(',', ''))
+    if numeric == float('inf'):
+        return None
+    return round(numeric)
+
+
+def extract_answer_number(completion):
+    candidate_segments = []
+
+    marker_patterns = [
+        r"the answer is\s*[:：]\s*(.*)",
+        r"final answer\s*[:：]\s*(.*)",
+        r"####\s*(.*)",
+    ]
+    for pattern in marker_patterns:
+        matches = re.findall(pattern, completion, flags=re.IGNORECASE)
+        for match in matches:
+            first_line = match.split("\n")[0].strip()
+            if first_line:
+                candidate_segments.append(first_line)
+
+    lines = [line.strip() for line in completion.splitlines() if line.strip()]
+    if lines:
+        candidate_segments.append(lines[-1])
+
+    candidate_segments.append(completion)
+
+    for segment in candidate_segments:
+        numbers = re.findall(r'[\-+]?\d+(?:,\d{3})*(?:/\d+(?:,\d{3})*)?(?:\.\d+)?', segment)
+        if not numbers:
+            continue
+
+        for token in [numbers[-1], *reversed(numbers[:-1])]:
+            try:
+                parsed = _parse_numeric_token(token)
+            except (ValueError, ZeroDivisionError):
+                parsed = None
+            if parsed is not None:
+                return parsed
+
+    return None
 
 
 def batch_data(data_list, batch_size=1):
