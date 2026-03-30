@@ -89,7 +89,7 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
     # Setup VLLM
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens)
-    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size)
+    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size, enforce_eager=True, gpu_memory_utilization=0.8,)
     
     res_completions = []
     result = []
