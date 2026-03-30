@@ -1,17 +1,23 @@
 import argparse
 import json
 import re
-from vllm import SamplingParams
 import sys
 import torch
 import gc
 import wandb
 from tqdm.auto import tqdm
 import os
+from types import SimpleNamespace
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.append(CURRENT_DIR)
 from moe_eval_utils import create_generation_backend
+
+try:
+    from vllm import SamplingParams as VLLMSamplingParams
+except ImportError:
+    VLLMSamplingParams = None
+
 MAX_INT = sys.maxsize
 
 
@@ -82,10 +88,18 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
     # Batch the instructions
     batch_instructions = batch_data(instructions, batch_size=batch_size)
 
-    # Setup VLLM
+    # Setup generation backend
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
-    sampling_params = SamplingParams(temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
+    if VLLMSamplingParams is not None and backend.__class__.__name__ == "VLLMBackend":
+        sampling_params = VLLMSamplingParams(
+            temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens
+        )
+    else:
+        # Works with HF MoE backend and allows running eval even when vllm is not installed.
+        sampling_params = SimpleNamespace(
+            temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens
+        )
     
     res_completions = []
     result = []

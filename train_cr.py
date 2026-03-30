@@ -64,7 +64,7 @@ def finetune():
     # Initialize wandb with the run directory
     wandb_run_name = os.path.basename(run_dir)
     wandb_run = wandb.init(
-        project="project_name`",
+        project="project_name",
         config=args,
         dir=os.path.join(run_dir, "logs")
     )
@@ -79,9 +79,7 @@ def finetune():
     # Data handling
     train_dataset = load_and_preprocess_cr(tokenizer=tokenizer, args=args)
 
-    data_collator=transformers.DataCollatorForSeq2Seq(
-            tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
-        )
+    data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     data_module = dict(train_dataset=train_dataset, data_collator=data_collator)
     
     if args.peft_method == "abba":

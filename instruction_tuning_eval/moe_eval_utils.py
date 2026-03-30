@@ -5,7 +5,6 @@ import sys
 import torch
 from safetensors.torch import load_file
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from vllm import LLM
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(CURRENT_DIR)
@@ -94,6 +93,12 @@ def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top
 
 class VLLMBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None, tensor_parallel_size: int):
+        try:
+            from vllm import LLM
+        except ImportError as exc:
+            raise ImportError(
+                "vLLM is required for backend='vllm'. Install vllm or use backend='hf_moe' for adaptive MoE checkpoints."
+            ) from exc
         self.llm = LLM(
             model=model_path,
             tokenizer=tokenizer_path if tokenizer_path else model_path,
@@ -101,6 +106,20 @@ class VLLMBackend:
         )
 
     def generate(self, prompts, sampling_params):
+        try:
+            from vllm import SamplingParams as VLLMSamplingParams
+        except ImportError as exc:
+            raise ImportError(
+                "vLLM SamplingParams is unavailable. Install vllm or switch backend to 'hf_moe'."
+            ) from exc
+        if not isinstance(sampling_params, VLLMSamplingParams):
+            sampling_params = VLLMSamplingParams(
+                temperature=float(getattr(sampling_params, "temperature", 0.0)),
+                top_p=float(getattr(sampling_params, "top_p", 1.0)),
+                top_k=int(getattr(sampling_params, "top_k", -1)),
+                max_tokens=int(getattr(sampling_params, "max_tokens", 256)),
+                stop=list(getattr(sampling_params, "stop", []) or []),
+            )
         outputs = self.llm.generate(prompts, sampling_params)
         return [output.outputs[0].text for output in outputs]
 
