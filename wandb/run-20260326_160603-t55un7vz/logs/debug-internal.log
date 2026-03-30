@@ -1,0 +1,11 @@
+{"time":"2026-03-26T16:06:03.973599372Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-03-26T16:06:03.973628186Z","level":"INFO","msg":"created symlink","path":"/home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260326_160603-t55un7vz/logs/debug-core.log"}
+{"time":"2026-03-26T16:06:04.07871166Z","level":"INFO","msg":"created new stream","id":"t55un7vz"}
+{"time":"2026-03-26T16:06:04.078729022Z","level":"INFO","msg":"stream: started","id":"t55un7vz"}
+{"time":"2026-03-26T16:06:04.078819015Z","level":"INFO","msg":"writer: Do: started","stream_id":"t55un7vz"}
+{"time":"2026-03-26T16:06:04.078992796Z","level":"INFO","msg":"sender: started","stream_id":"t55un7vz"}
+{"time":"2026-03-26T16:06:04.079110674Z","level":"INFO","msg":"handler: started","stream_id":"t55un7vz"}
+{"time":"2026-03-26T16:06:04.599932548Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-03-26T16:06:09.511334197Z","level":"INFO","msg":"stream: closing","id":"t55un7vz"}
+{"time":"2026-03-26T16:06:09.51140376Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-03-26T16:06:09.514172184Z","level":"INFO","msg":"Stopped system monitor"}

@@ -1,0 +1,57 @@
+prompt ===== Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{instruction}
+
+### Response: Let's think step by step.
+length ==== 1319
+sampling ===== SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=0, top_p=1.0, top_k=-1, min_p=0.0, seed=None, stop=['Instruction:', 'Instruction', 'Response:', 'Response'], stop_token_ids=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=256, min_tokens=0, logprobs=None, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None), guided_decoding=None
+Loading checkpoint shards: 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:02<00:00,  1.17s/it]
+Traceback (most recent call last):
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 198, in <module>
+    gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 110, in gsm8k_test
+    backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 242, in create_generation_backend
+    return HFMoEBackend(model_path, tokenizer_path)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 155, in __init__
+    model = get_moe_lora_model(base_model, moe_config)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 335, in get_moe_lora_model
+    return apply_moe_lora(model, config)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 310, in apply_moe_lora
+    wrapped = RankMoELoRALayer.from_linear(
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 96, in from_linear
+    layer = cls(
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 61, in __init__
+    self.base = nn.Linear(d_in, d_out, bias=bias)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 104, in __init__
+    self.reset_parameters()
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 110, in reset_parameters
+    init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/init.py", line 460, in kaiming_uniform_
+    return tensor.uniform_(-bound, bound, generator=generator)
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 198, in <module>
+    gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 110, in gsm8k_test
+    backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 242, in create_generation_backend
+    return HFMoEBackend(model_path, tokenizer_path)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 155, in __init__
+    model = get_moe_lora_model(base_model, moe_config)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 335, in get_moe_lora_model
+    return apply_moe_lora(model, config)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 310, in apply_moe_lora
+    wrapped = RankMoELoRALayer.from_linear(
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 96, in from_linear
+    layer = cls(
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 61, in __init__
+    self.base = nn.Linear(d_in, d_out, bias=bias)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 104, in __init__
+    self.reset_parameters()
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 110, in reset_parameters
+    init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/init.py", line 460, in kaiming_uniform_
+    return tensor.uniform_(-bound, bound, generator=generator)
+KeyboardInterrupt

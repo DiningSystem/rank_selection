@@ -1,0 +1,19 @@
+{"time":"2026-03-30T08:56:48.253979273Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-03-30T08:56:48.254006742Z","level":"INFO","msg":"created symlink","path":"/home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260330_085648-922srqn7/logs/debug-core.log"}
+{"time":"2026-03-30T08:56:48.36108867Z","level":"INFO","msg":"created new stream","id":"922srqn7"}
+{"time":"2026-03-30T08:56:48.361156185Z","level":"INFO","msg":"stream: started","id":"922srqn7"}
+{"time":"2026-03-30T08:56:48.361243747Z","level":"INFO","msg":"writer: Do: started","stream_id":"922srqn7"}
+{"time":"2026-03-30T08:56:48.361289287Z","level":"INFO","msg":"sender: started","stream_id":"922srqn7"}
+{"time":"2026-03-30T08:56:48.361370771Z","level":"INFO","msg":"handler: started","stream_id":"922srqn7"}
+{"time":"2026-03-30T08:56:49.882084239Z","level":"ERROR","msg":"send: sendRun: failed to update run state: no data but must resume"}
+{"time":"2026-03-30T08:56:49.893633429Z","level":"INFO","msg":"stream: closing","id":"922srqn7"}
+{"time":"2026-03-30T08:56:49.894539134Z","level":"ERROR","msg":"sender: upsertConfig: RunRecord is nil"}
+{"time":"2026-03-30T08:56:49.894655282Z","level":"WARN","msg":"No requirements.txt found, not creating job artifact. See https://docs.wandb.ai/guides/launch/create-job"}
+{"time":"2026-03-30T08:56:49.894666436Z","level":"INFO","msg":"sender: sendDefer: no job artifact to save"}
+{"time":"2026-03-30T08:56:52.538480157Z","level":"ERROR","msg":"HTTP error","status":404,"method":"POST","url":"https://api.wandb.ai/graphql"}
+{"time":"2026-03-30T08:56:52.53851297Z","level":"ERROR","msg":"runfiles: CreateRunFiles returned error: returned error 404 Not Found: {\"errors\":[{\"message\":\"project /project_name not found during createRunFiles\",\"path\":[\"createRunFiles\"]}],\"data\":{\"createRunFiles\":null}}"}
+{"time":"2026-03-30T08:56:52.538825593Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-03-30T08:56:52.538940717Z","level":"INFO","msg":"handler: closed","stream_id":"922srqn7"}
+{"time":"2026-03-30T08:56:52.538953147Z","level":"INFO","msg":"writer: Close: closed","stream_id":"922srqn7"}
+{"time":"2026-03-30T08:56:52.539038754Z","level":"INFO","msg":"sender: closed","stream_id":"922srqn7"}
+{"time":"2026-03-30T08:56:52.539080985Z","level":"INFO","msg":"stream: closed","id":"922srqn7"}

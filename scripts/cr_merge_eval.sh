@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Configuration
-MODEL="meta-llama/Llama-3.2-1B"
+MODEL="meta-llama/Llama-3.2-3B"
 GPU_ID=0  # Specify which GPU to use
 
 # List of run directories to process; add trained adapter directories here
-RUN_DIRS=("")
+RUN_DIRS=("/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/commonsense_reasoning/Llama-3.2-3B/20260330_034838_rank_32_lr0.001")
 
 # Process each run directory
 for RUN_DIR in "${RUN_DIRS[@]}"; do

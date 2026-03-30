@@ -179,7 +179,7 @@ def parse_args():
             wandb.init(
                 id=wandb_run_id,
                 project="project_name",
-                resume="must"
+                resume="allow"
             )
         except FileNotFoundError:
             print("WandB run ID file not found, starting new run")

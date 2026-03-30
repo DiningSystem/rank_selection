@@ -1,0 +1,18 @@
+prompt ===== Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{instruction}
+
+### Response: Let's think step by step.
+length ==== 1319
+sampling ===== SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=0, top_p=1.0, top_k=-1, min_p=0.0, seed=None, stop=['Instruction:', 'Instruction', 'Response:', 'Response'], stop_token_ids=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=256, min_tokens=0, logprobs=None, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None), guided_decoding=None
+Loading checkpoint shards: 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:02<00:00,  1.16s/it]
+
+Generating responses...
+Generating responses: 100%|█████████████████████████████████████████| 11/11 [06:32<00:00, 35.66s/it]
+
+Evaluating responses...
+Evaluating answers: 100%|███████████████████████████████████| 1319/1319 [00:00<00:00, 429525.39it/s]
+len invalid outputs ==== 92
+start=== 0 , end==== 9223372036854775807
+gsm8k length==== 1319 , gsm8k acc==== 0.6186504927975739

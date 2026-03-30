@@ -1,0 +1,17 @@
+{"time":"2026-03-28T07:44:40.987762281Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-03-28T07:44:40.987774447Z","level":"INFO","msg":"created symlink","path":"/home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260328_074440-soau8h1s/logs/debug-core.log"}
+{"time":"2026-03-28T07:44:41.095481158Z","level":"INFO","msg":"created new stream","id":"soau8h1s"}
+{"time":"2026-03-28T07:44:41.095507888Z","level":"INFO","msg":"stream: started","id":"soau8h1s"}
+{"time":"2026-03-28T07:44:41.095613502Z","level":"INFO","msg":"writer: Do: started","stream_id":"soau8h1s"}
+{"time":"2026-03-28T07:44:41.095638062Z","level":"INFO","msg":"sender: started","stream_id":"soau8h1s"}
+{"time":"2026-03-28T07:44:41.095761714Z","level":"INFO","msg":"handler: started","stream_id":"soau8h1s"}
+{"time":"2026-03-28T07:44:41.557294459Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-03-28T09:04:11.699479728Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2026-03-28T09:45:56.256523086Z","level":"INFO","msg":"stream: closing","id":"soau8h1s"}
+{"time":"2026-03-28T09:45:56.256575681Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-03-28T09:45:56.257848978Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-03-28T09:45:58.633591562Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-03-28T09:45:58.835218744Z","level":"INFO","msg":"handler: closed","stream_id":"soau8h1s"}
+{"time":"2026-03-28T09:45:58.835351435Z","level":"INFO","msg":"writer: Close: closed","stream_id":"soau8h1s"}
+{"time":"2026-03-28T09:45:58.835363417Z","level":"INFO","msg":"sender: closed","stream_id":"soau8h1s"}
+{"time":"2026-03-28T09:45:58.835447519Z","level":"INFO","msg":"stream: closed","id":"soau8h1s"}

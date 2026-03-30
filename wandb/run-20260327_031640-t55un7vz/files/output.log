@@ -1,0 +1,103 @@
+promt ===== Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{instruction}
+
+### Response: Let's think step by step.
+total length === 5000
+lenght ==== 5000
+sampleing ===== SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=0, top_p=1.0, top_k=-1, min_p=0.0, seed=None, stop=['Instruction:', 'Instruction', 'Response:', 'Response'], stop_token_ids=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=512, min_tokens=0, logprobs=None, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None), guided_decoding=None
+Loading checkpoint shards: 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:02<00:00,  1.36s/it]
+Generating responses...:   1%|▏                                | 1/157 [26:34<69:06:50, 1594.94s/it]
+Traceback (most recent call last):
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 146, in <module>
+    test_hendrycks_math(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 95, in test_hendrycks_math
+    completions = backend.generate(prompt, sampling_params)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 213, in generate
+    return self._generate_once(prompts, sampling_params)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 193, in _generate_once
+    generated = self.model.generate(**inputs, **gen_kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 2215, in generate
+    result = self._sample(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 3206, in _sample
+    outputs = self(**model_inputs, return_dict=True)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 1065, in forward
+    outputs = self.model(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 791, in forward
+    layer_outputs = decoder_layer(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 543, in forward
+    hidden_states = self.mlp(hidden_states)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 160, in forward
+    return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 169, in forward
+    self.rank_usage_counts += (g > 0).sum(dim=0).to(self.rank_usage_counts.dtype)
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 146, in <module>
+    test_hendrycks_math(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 95, in test_hendrycks_math
+    completions = backend.generate(prompt, sampling_params)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 213, in generate
+    return self._generate_once(prompts, sampling_params)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 193, in _generate_once
+    generated = self.model.generate(**inputs, **gen_kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 2215, in generate
+    result = self._sample(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 3206, in _sample
+    outputs = self(**model_inputs, return_dict=True)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 1065, in forward
+    outputs = self.model(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 791, in forward
+    layer_outputs = decoder_layer(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 543, in forward
+    hidden_states = self.mlp(hidden_states)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 160, in forward
+    return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 169, in forward
+    self.rank_usage_counts += (g > 0).sum(dim=0).to(self.rank_usage_counts.dtype)
+KeyboardInterrupt

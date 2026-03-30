@@ -1,0 +1,28 @@
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Current SDK version is 0.18.7
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Configure stats pid to 137724
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Loading settings from /home/gdi-user/.config/wandb/settings
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Loading settings from /home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/settings
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Loading settings from environment variables: {}
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Applying setup settings: {'mode': None, '_disable_service': None}
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Inferring run settings from compute environment: {'program_relpath': 'instruction_tuning_eval/commonsense_eval.py', 'program_abspath': '/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/commonsense_eval.py', 'program': '/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/commonsense_eval.py'}
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_setup.py:_flush():79] Applying login settings: {}
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_init.py:_log_setup():533] Logging user logs to /home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260330_085648-922srqn7/logs/debug.log
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_init.py:_log_setup():534] Logging internal logs to /home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260330_085648-922srqn7/logs/debug-internal.log
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_init.py:init():619] calling init triggers
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_init.py:init():626] wandb.init called with sweep_config: {}
+config: {}
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_init.py:init():669] starting backend
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [wandb_init.py:init():673] sending inform_init request
+2026-03-30 08:56:48,248 INFO    MainThread:137724 [backend.py:_multiprocessing_setup():104] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2026-03-30 08:56:48,249 INFO    MainThread:137724 [wandb_init.py:init():686] backend started and connected
+2026-03-30 08:56:48,250 INFO    MainThread:137724 [wandb_init.py:init():781] updated telemetry
+2026-03-30 08:56:48,255 INFO    MainThread:137724 [wandb_init.py:init():814] communicating run to backend with 90.0 second timeout
+2026-03-30 08:56:49,884 ERROR   MainThread:137724 [wandb_init.py:init():841] encountered error: You provided an invalid value for the `resume` argument. The value 'must' is not a valid option for resuming the run (922srqn7) that has not been initialized. Please check your inputs and try again with a valid run ID. If you are trying to start a new run, please omit the `resume` argument or use `resume='allow'`.
+2026-03-30 08:56:49,884 ERROR   MainThread:137724 [wandb_init.py:init():1266] error in wandb.init()
+Traceback (most recent call last):
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/wandb/sdk/wandb_init.py", line 1256, in init
+    return wi.init()
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/wandb/sdk/wandb_init.py", line 847, in init
+    raise error
+wandb.errors.errors.UsageError: You provided an invalid value for the `resume` argument. The value 'must' is not a valid option for resuming the run (922srqn7) that has not been initialized. Please check your inputs and try again with a valid run ID. If you are trying to start a new run, please omit the `resume` argument or use `resume='allow'`.
+2026-03-30 08:56:49,894 WARNING MsgRouterThr:137724 [router.py:message_loop():75] message_loop has been closed

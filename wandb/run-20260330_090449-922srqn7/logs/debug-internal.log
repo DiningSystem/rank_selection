@@ -1,0 +1,16 @@
+{"time":"2026-03-30T09:04:49.484168292Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-03-30T09:04:49.484196364Z","level":"INFO","msg":"created symlink","path":"/home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260330_090449-922srqn7/logs/debug-core.log"}
+{"time":"2026-03-30T09:04:49.589561999Z","level":"INFO","msg":"created new stream","id":"922srqn7"}
+{"time":"2026-03-30T09:04:49.589604441Z","level":"INFO","msg":"stream: started","id":"922srqn7"}
+{"time":"2026-03-30T09:04:49.589683008Z","level":"INFO","msg":"writer: Do: started","stream_id":"922srqn7"}
+{"time":"2026-03-30T09:04:49.589705505Z","level":"INFO","msg":"handler: started","stream_id":"922srqn7"}
+{"time":"2026-03-30T09:04:49.589774697Z","level":"INFO","msg":"sender: started","stream_id":"922srqn7"}
+{"time":"2026-03-30T09:04:49.98148988Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-03-30T09:05:05.939481545Z","level":"INFO","msg":"stream: closing","id":"922srqn7"}
+{"time":"2026-03-30T09:05:05.939502189Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-03-30T09:05:05.941583407Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-03-30T09:05:07.95938402Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-03-30T09:05:08.12958888Z","level":"INFO","msg":"handler: closed","stream_id":"922srqn7"}
+{"time":"2026-03-30T09:05:08.129611042Z","level":"INFO","msg":"writer: Close: closed","stream_id":"922srqn7"}
+{"time":"2026-03-30T09:05:08.129663714Z","level":"INFO","msg":"sender: closed","stream_id":"922srqn7"}
+{"time":"2026-03-30T09:05:08.12969176Z","level":"INFO","msg":"stream: closed","id":"922srqn7"}

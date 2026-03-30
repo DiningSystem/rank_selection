@@ -1,0 +1,115 @@
+prompt ===== Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{instruction}
+
+### Response: Let's think step by step.
+length ==== 1319
+sampling ===== SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=0, top_p=1.0, top_k=-1, min_p=0.0, seed=None, stop=['Instruction:', 'Instruction', 'Response:', 'Response'], stop_token_ids=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=256, min_tokens=0, logprobs=None, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None), guided_decoding=None
+[moe_eval_utils] Detected adaptive MoE checkpoint; using HF MoE backend for eval.
+Loading checkpoint shards: 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:14<00:00,  7.26s/it]
+
+Generating responses...
+Generating responses:   0%|                                                  | 0/10 [00:00<?, ?it/s]/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:590: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+Generating responses:   0%|                                                  | 0/10 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 198, in <module>
+    gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 127, in gsm8k_test
+    completions = backend.generate(prompt, sampling_params)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 165, in generate
+    generated = self.model.generate(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 2215, in generate
+    result = self._sample(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 3206, in _sample
+    outputs = self(**model_inputs, return_dict=True)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 1065, in forward
+    outputs = self.model(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 791, in forward
+    layer_outputs = decoder_layer(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 528, in forward
+    hidden_states, self_attn_weights, present_key_value = self.self_attn(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 422, in forward
+    query_states = self.q_proj(hidden_states)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 133, in forward
+    base_y = self.base(x_2d)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 117, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: expected mat1 and mat2 to have the same dtype, but got: c10::BFloat16 != float
+Traceback (most recent call last):
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 198, in <module>
+    gsm8k_test(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/gsm8k_eval.py", line 127, in gsm8k_test
+    completions = backend.generate(prompt, sampling_params)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/moe_eval_utils.py", line 165, in generate
+    generated = self.model.generate(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 2215, in generate
+    result = self._sample(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/generation/utils.py", line 3206, in _sample
+    outputs = self(**model_inputs, return_dict=True)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 1065, in forward
+    outputs = self.model(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 791, in forward
+    layer_outputs = decoder_layer(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 528, in forward
+    hidden_states, self_attn_weights, present_key_value = self.self_attn(
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/transformers/models/mistral/modeling_mistral.py", line 422, in forward
+    query_states = self.q_proj(hidden_states)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/moe_lora.py", line 133, in forward
+    base_y = self.base(x_2d)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 117, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: expected mat1 and mat2 to have the same dtype, but got: c10::BFloat16 != float

@@ -1,0 +1,88 @@
+promt ===== Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{instruction}
+
+### Response: Let's think step by step.
+total length === 5000
+lenght ==== 5000
+sampleing ===== SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=0, top_p=1.0, top_k=-1, min_p=0.0, seed=None, stop=['Instruction:', 'Instruction', 'Response:', 'Response'], stop_token_ids=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=512, min_tokens=0, logprobs=None, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None), guided_decoding=None
+INFO 03-26 03:53:19 llm_engine.py:237] Initializing an LLM engine (v0.6.3.post1) with config: model='/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260325_110335_rank_32_lr0.001_alpha_16_train_train50000/final_model', speculative_config=None, tokenizer='/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260325_110335_rank_32_lr0.001_alpha_16_train_train50000/tokenizer', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, rope_scaling=None, rope_theta=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='outlines'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260325_110335_rank_32_lr0.001_alpha_16_train_train50000/final_model, num_scheduler_steps=1, chunked_prefill_enabled=False multi_step_stream_outputs=True, enable_prefix_caching=False, use_async_output_proc=True, use_cached_outputs=False, mm_processor_kwargs=None)
+INFO 03-26 03:53:19 selector.py:247] Cannot use FlashAttention-2 backend due to sliding window.
+INFO 03-26 03:53:19 selector.py:115] Using XFormers backend.
+/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/xformers/ops/fmha/flash.py:211: FutureWarning: `torch.library.impl_abstract` was renamed to `torch.library.register_fake`. Please use that instead; we will remove `torch.library.impl_abstract` in a future version of PyTorch.
+  @torch.library.impl_abstract("xformers_flash::flash_fwd")
+/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/xformers/ops/fmha/flash.py:344: FutureWarning: `torch.library.impl_abstract` was renamed to `torch.library.register_fake`. Please use that instead; we will remove `torch.library.impl_abstract` in a future version of PyTorch.
+  @torch.library.impl_abstract("xformers_flash::flash_bwd")
+INFO 03-26 03:53:20 model_runner.py:1056] Starting to load model /home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/arithmetic/Mistral-7B-v0.1/20260325_110335_rank_32_lr0.001_alpha_16_train_train50000/final_model...
+INFO 03-26 03:53:20 selector.py:247] Cannot use FlashAttention-2 backend due to sliding window.
+INFO 03-26 03:53:20 selector.py:115] Using XFormers backend.
+Loading safetensors checkpoint shards:   0% Completed | 0/7 [00:00<?, ?it/s]
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 152, in <module>
+[rank0]:     test_hendrycks_math(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+[rank0]:   File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 89, in test_hendrycks_math
+[rank0]:     llm = LLM(model=model, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/entrypoints/llm.py", line 177, in __init__
+[rank0]:     self.llm_engine = LLMEngine.from_engine_args(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/engine/llm_engine.py", line 573, in from_engine_args
+[rank0]:     engine = cls(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/engine/llm_engine.py", line 334, in __init__
+[rank0]:     self.model_executor = executor_class(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/executor/executor_base.py", line 47, in __init__
+[rank0]:     self._init_executor()
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/executor/gpu_executor.py", line 40, in _init_executor
+[rank0]:     self.driver_worker.load_model()
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/worker/worker.py", line 183, in load_model
+[rank0]:     self.model_runner.load_model()
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/worker/model_runner.py", line 1058, in load_model
+[rank0]:     self.model = get_model(model_config=self.model_config,
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/model_loader/__init__.py", line 19, in get_model
+[rank0]:     return loader.load_model(model_config=model_config,
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/model_loader/loader.py", line 402, in load_model
+[rank0]:     model.load_weights(self._get_all_weights(model_config, model))
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/llama.py", line 582, in load_weights
+[rank0]:     loader.load_weights(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/utils.py", line 203, in load_weights
+[rank0]:     autoloaded_weights = list(self._load_module("", self.module, weights))
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/utils.py", line 182, in _load_module
+[rank0]:     yield from self._load_module(prefix,
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/utils.py", line 169, in _load_module
+[rank0]:     module_load_weights(weights)
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/llama.py", line 414, in load_weights
+[rank0]:     param = params_dict[name]
+[rank0]: KeyError: 'layers.10.mlp.down_proj.A'
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 152, in <module>
+[rank0]:     test_hendrycks_math(model=args.model, data_path=args.data_file, start=args.start, end=args.end,
+[rank0]:   File "/home/gdi-user/enguyen/research_vllm/test/rank_selection/instruction_tuning_eval/MATH_eval.py", line 89, in test_hendrycks_math
+[rank0]:     llm = LLM(model=model, tokenizer=tokenizer_path, tensor_parallel_size=tensor_parallel_size)
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/entrypoints/llm.py", line 177, in __init__
+[rank0]:     self.llm_engine = LLMEngine.from_engine_args(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/engine/llm_engine.py", line 573, in from_engine_args
+[rank0]:     engine = cls(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/engine/llm_engine.py", line 334, in __init__
+[rank0]:     self.model_executor = executor_class(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/executor/executor_base.py", line 47, in __init__
+[rank0]:     self._init_executor()
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/executor/gpu_executor.py", line 40, in _init_executor
+[rank0]:     self.driver_worker.load_model()
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/worker/worker.py", line 183, in load_model
+[rank0]:     self.model_runner.load_model()
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/worker/model_runner.py", line 1058, in load_model
+[rank0]:     self.model = get_model(model_config=self.model_config,
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/model_loader/__init__.py", line 19, in get_model
+[rank0]:     return loader.load_model(model_config=model_config,
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/model_loader/loader.py", line 402, in load_model
+[rank0]:     model.load_weights(self._get_all_weights(model_config, model))
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/llama.py", line 582, in load_weights
+[rank0]:     loader.load_weights(
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/utils.py", line 203, in load_weights
+[rank0]:     autoloaded_weights = list(self._load_module("", self.module, weights))
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/utils.py", line 182, in _load_module
+[rank0]:     yield from self._load_module(prefix,
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/utils.py", line 169, in _load_module
+[rank0]:     module_load_weights(weights)
+[rank0]:   File "/home/gdi-user/miniconda3/envs/lora/lib/python3.10/site-packages/vllm/model_executor/models/llama.py", line 414, in load_weights
+[rank0]:     param = params_dict[name]
+[rank0]: KeyError: 'layers.10.mlp.down_proj.A'
