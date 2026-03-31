@@ -1,17 +1,23 @@
 import argparse
 import json
 import re
-from vllm import SamplingParams
 import sys
 import torch
 import gc
 import wandb
 from tqdm.auto import tqdm
 import os
+from types import SimpleNamespace
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.append(CURRENT_DIR)
 from moe_eval_utils import create_generation_backend
+
+try:
+    from vllm import SamplingParams as VLLMSamplingParams
+except ImportError:
+    VLLMSamplingParams = None
+
 MAX_INT = sys.maxsize
 
 
@@ -65,7 +71,21 @@ def generate_prompt(instruction, input=None):
 """
 
 
-def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch_size=1, tensor_parallel_size=1, tokenizer=None, backend="auto"):
+def commonsense_test(
+    model,
+    dataset_name,
+    data_path,
+    start=0,
+    end=MAX_INT,
+    batch_size=1,
+    tensor_parallel_size=1,
+    tokenizer=None,
+    backend="auto",
+    temperature=0.0,
+    top_p=1.0,
+    top_k=-1,
+    max_tokens=32,
+):
     """Main evaluation function for commonsense tasks."""
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
@@ -82,10 +102,18 @@ def commonsense_test(model, dataset_name, data_path, start=0, end=MAX_INT, batch
     # Batch the instructions
     batch_instructions = batch_data(instructions, batch_size=batch_size)
 
-    # Setup VLLM
+    # Setup generation backend
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
-    sampling_params = SamplingParams(temperature=0.1, top_p=0.75, top_k=40, max_tokens=32, stop=stop_tokens)
     backend = create_generation_backend(model, tokenizer, tensor_parallel_size, backend=backend)
+    if VLLMSamplingParams is not None and backend.__class__.__name__ == "VLLMBackend":
+        sampling_params = VLLMSamplingParams(
+            temperature=temperature, top_p=top_p, top_k=top_k, max_tokens=max_tokens, stop=stop_tokens
+        )
+    else:
+        # Works with HF MoE backend and allows running eval even when vllm is not installed.
+        sampling_params = SimpleNamespace(
+            temperature=temperature, top_p=top_p, top_k=top_k, max_tokens=max_tokens, stop=stop_tokens
+        )
     
     res_completions = []
     result = []
@@ -160,6 +188,14 @@ def parse_args():
                       help="Tensor parallel size for model")
     parser.add_argument("--backend", type=str, default="auto", choices=["auto", "vllm", "hf_moe"],
                       help="Generation backend")
+    parser.add_argument("--temperature", type=float, default=0.0,
+                      help="Sampling temperature (0.0 for deterministic greedy decoding)")
+    parser.add_argument("--top_p", type=float, default=1.0,
+                      help="Nucleus sampling top-p")
+    parser.add_argument("--top_k", type=int, default=-1,
+                      help="Top-k sampling value (-1 disables top-k filtering)")
+    parser.add_argument("--max_tokens", type=int, default=32,
+                      help="Maximum generated tokens per sample")
     parser.add_argument("--run_dir", type=str,
                       help="Directory containing the wandb run ID")
 
@@ -197,5 +233,9 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         tensor_parallel_size=args.tensor_parallel_size,
         tokenizer=args.tokenizer,
-        backend=args.backend
+        backend=args.backend,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        max_tokens=args.max_tokens,
     )

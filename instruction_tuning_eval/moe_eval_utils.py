@@ -5,7 +5,6 @@ import sys
 import torch
 from safetensors.torch import load_file
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from vllm import LLM
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(CURRENT_DIR)
@@ -94,6 +93,12 @@ def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top
 
 class VLLMBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None, tensor_parallel_size: int):
+        try:
+            from vllm import LLM
+        except ImportError as exc:
+            raise ImportError(
+                "vLLM is required for backend='vllm'. Install vllm or use backend='hf_moe' for adaptive MoE checkpoints."
+            ) from exc
         self.llm = LLM(
             model=model_path,
             tokenizer=tokenizer_path if tokenizer_path else model_path,
@@ -101,6 +106,20 @@ class VLLMBackend:
         )
 
     def generate(self, prompts, sampling_params):
+        try:
+            from vllm import SamplingParams as VLLMSamplingParams
+        except ImportError as exc:
+            raise ImportError(
+                "vLLM SamplingParams is unavailable. Install vllm or switch backend to 'hf_moe'."
+            ) from exc
+        if not isinstance(sampling_params, VLLMSamplingParams):
+            sampling_params = VLLMSamplingParams(
+                temperature=float(getattr(sampling_params, "temperature", 0.0)),
+                top_p=float(getattr(sampling_params, "top_p", 1.0)),
+                top_k=int(getattr(sampling_params, "top_k", -1)),
+                max_tokens=int(getattr(sampling_params, "max_tokens", 256)),
+                stop=list(getattr(sampling_params, "stop", []) or []),
+            )
         outputs = self.llm.generate(prompts, sampling_params)
         return [output.outputs[0].text for output in outputs]
 
@@ -135,6 +154,13 @@ class HFMoEBackend:
         self.use_cache = os.getenv("HF_MOE_USE_CACHE", "1") == "1"
         if hasattr(self.model.config, "use_cache"):
             self.model.config.use_cache = self.use_cache
+        if hasattr(self.model, "generation_config") and self.model.generation_config is not None:
+            # Avoid transformers warnings and stale sampling config leakage from checkpoints
+            # when we run deterministic (do_sample=False) decoding.
+            self.model.generation_config.do_sample = False
+            self.model.generation_config.temperature = None
+            self.model.generation_config.top_p = None
+            self.model.generation_config.top_k = None
         tokenizer_source = tokenizer_path if tokenizer_path else base_model_name
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
         if self.tokenizer.pad_token_id is None:
@@ -165,10 +191,17 @@ class HFMoEBackend:
             "use_cache": use_cache_flag,
             "pad_token_id": self.tokenizer.pad_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
+            "num_beams": 1,
         }
         if do_sample:
             gen_kwargs["temperature"] = float(getattr(sampling_params, "temperature", 1.0))
             gen_kwargs["top_p"] = float(getattr(sampling_params, "top_p", 1.0))
+            gen_kwargs["top_k"] = int(getattr(sampling_params, "top_k", -1))
+        else:
+            # Explicitly unset sampling-only knobs to prevent HF warnings and ambiguity.
+            gen_kwargs["temperature"] = None
+            gen_kwargs["top_p"] = None
+            gen_kwargs["top_k"] = None
         with torch.inference_mode():
             generated = self.model.generate(**inputs, **gen_kwargs)
         prompt_len = inputs["input_ids"].shape[1]

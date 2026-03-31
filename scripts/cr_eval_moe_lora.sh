@@ -8,6 +8,10 @@ BASE_MODEL=${BASE_MODEL:-""}
 PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
 VLLM_BATCH_SIZE_CR=${VLLM_BATCH_SIZE_CR:-128}
 HF_BATCH_SIZE_CR=${HF_BATCH_SIZE_CR:-16}
+EVAL_TEMPERATURE=${EVAL_TEMPERATURE:-0.0}
+EVAL_TOP_P=${EVAL_TOP_P:-1.0}
+EVAL_TOP_K=${EVAL_TOP_K:--1}
+EVAL_MAX_TOKENS=${EVAL_MAX_TOKENS:-32}
 RUN_DIRS=()
 
 source scripts/moe_eval_common.sh
@@ -76,6 +80,10 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
       --dataset "$dataset" \
       --data_file "data/commonsense/$dataset/test.json" \
       --batch_size "$EFFECTIVE_CR_BS" \
+      --temperature "$EVAL_TEMPERATURE" \
+      --top_p "$EVAL_TOP_P" \
+      --top_k "$EVAL_TOP_K" \
+      --max_tokens "$EVAL_MAX_TOKENS" \
       --tensor_parallel_size 1 \
       --run_dir "$RUN_ROOT"
   done

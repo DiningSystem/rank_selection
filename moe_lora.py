@@ -356,14 +356,35 @@ def load_moe_state_dict_flexible(self, state_dict: Dict[str, torch.Tensor], stri
         print(f"[moe_lora] checkpoint/model key overlap: {best_overlap}/{len(model_keys)} ({overlap_ratio:.1%})")
 
     load_result = self.load_state_dict(best_candidate, strict=strict)
+    if hasattr(self, "tie_weights"):
+        try:
+            self.tie_weights()
+        except Exception:
+            pass
     if not strict:
-        missing = len(getattr(load_result, "missing_keys", []))
-        unexpected = len(getattr(load_result, "unexpected_keys", []))
-        if missing > int(0.2 * len(model_keys)):
+        missing_keys = list(getattr(load_result, "missing_keys", []))
+        unexpected_keys = list(getattr(load_result, "unexpected_keys", []))
+        missing = len(missing_keys)
+        unexpected = len(unexpected_keys)
+
+        benign_missing = {"lm_head.weight"}
+        effective_missing = [k for k in missing_keys if k not in benign_missing]
+        effective_missing_count = len(effective_missing)
+
+        if missing_keys and effective_missing_count == 0:
             print(
-                f"[moe_lora] Warning: large number of missing keys after load: {missing} "
+                "[moe_lora] Note: only benign missing keys detected "
+                f"({missing_keys}). This is typically expected with tied lm_head weights."
+            )
+
+        if effective_missing_count > int(0.2 * len(model_keys)):
+            print(
+                f"[moe_lora] Warning: large number of missing keys after load: {effective_missing_count} "
                 f"(unexpected: {unexpected}). This likely indicates checkpoint mismatch."
             )
+            print(f"[moe_lora] Sample missing keys: {effective_missing[:10]}")
+        if unexpected > 0:
+            print(f"[moe_lora] Sample unexpected keys: {unexpected_keys[:10]}")
     return load_result
 
 
