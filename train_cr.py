@@ -100,7 +100,12 @@ def finetune():
 
     # Setup optimizer
     trainable_parameters = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(trainable_parameters, lr=args.lr)
+    optimizer = torch.optim.AdamW(
+        trainable_parameters,
+        lr=args.lr,
+        betas=(0.9, 0.95),
+        eps=1e-8,
+    )
 
     if args.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -196,7 +201,7 @@ if __name__ == "__main__":
     parser.add_argument("--gradient_checkpointing", action="store_true", help="Enable model-wide gradient checkpointing")
     parser.add_argument("--warmup_ratio", type=float, default=0.02, help="Warmup steps")
     parser.add_argument("--max_seq_length", type=int, default=256, help="Maximum sequence length")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=2e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     parser.add_argument("--dataloader_num_workers", type=int, default=8, help="DataLoader worker count for faster input pipeline")
