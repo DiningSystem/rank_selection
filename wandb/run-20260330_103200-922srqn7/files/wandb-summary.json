@@ -1,1 +1,0 @@
-{"eval/openbookqa_acc":0.858,"_runtime":397.128020352,"eval/hellaswag_acc":0.9312885879306912,"eval/ARC-Challenge_acc":0.7849829351535836,"eval/ARC-Easy_acc":0.8952020202020202,"_step":7,"_timestamp":1.7748667407818787e+09,"_wandb":{"runtime":397},"eval/boolq_acc":0.7376146788990826,"eval/piqa_acc":0.8775843307943417}

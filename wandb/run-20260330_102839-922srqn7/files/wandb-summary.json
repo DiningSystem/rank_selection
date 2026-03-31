@@ -1,1 +1,0 @@
-{"_step":4,"_timestamp":1.7748665483647358e+09,"_wandb":{"runtime":234},"eval/ARC-Challenge_acc":0.7849829351535836,"eval/ARC-Easy_acc":0.8952020202020202,"eval/hellaswag_acc":0.9312885879306912,"eval/boolq_acc":0.7376146788990826,"_runtime":234.598693625}
