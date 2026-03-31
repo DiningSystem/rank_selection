@@ -1,3 +1,4 @@
 mistral-7b/
 experiments/
 data/commonsense/commonsense_170k.json
+wandb/
