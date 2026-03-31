@@ -3,8 +3,9 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --moe_r_max=32 \
   --moe_top_k=1 \
   --moe_router_hidden_dim=128 \
-  --gradient_checkpointing \
-  --lr=2e-4 \
+  --lr=1e-4 \
+  --lora_alpha=32 \
+  --scheduler=cosine \
   --hf_fast_download \
   --hf_preload \
   --hf_prefer_safetensors
