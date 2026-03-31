@@ -1,0 +1,31 @@
+WARNING 03-30 10:33:15 arg_utils.py:957] Chunked prefill is enabled by default for models with max_model_len > 32K. Currently, chunked prefill might not work with some features or models. If you encounter any issues, please disable chunked prefill by setting --enable-chunked-prefill=False.
+INFO 03-30 10:33:15 config.py:1021] Chunked prefill is enabled with max_num_batched_tokens=512.
+WARNING 03-30 10:33:15 config.py:395] To see benefits of async output processing, enable CUDA graph. Since, enforce-eager is enabled, async output processor cannot be used
+INFO 03-30 10:33:15 llm_engine.py:237] Initializing an LLM engine (v0.6.3.post1) with config: model='/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/commonsense_reasoning/Llama-3.2-3B/20260330_034838_rank_32_lr0.001/merged_model', speculative_config=None, tokenizer='/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/commonsense_reasoning/Llama-3.2-3B/20260330_034838_rank_32_lr0.001/merged_model', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, rope_scaling=None, rope_theta=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=131072, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=True, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='outlines'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/commonsense_reasoning/Llama-3.2-3B/20260330_034838_rank_32_lr0.001/merged_model, num_scheduler_steps=1, chunked_prefill_enabled=True multi_step_stream_outputs=True, enable_prefix_caching=False, use_async_output_proc=False, use_cached_outputs=False, mm_processor_kwargs=None)
+INFO 03-30 10:33:16 model_runner.py:1056] Starting to load model /home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/commonsense_reasoning/Llama-3.2-3B/20260330_034838_rank_32_lr0.001/merged_model...
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:00<00:00,  1.59it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  2.52it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  2.32it/s]
+INFO 03-30 10:33:17 model_runner.py:1067] Loading model weights took 6.0160 GB
+INFO 03-30 10:33:18 gpu_executor.py:122] # GPU blocks: 18040, # CPU blocks: 2340
+INFO 03-30 10:33:18 gpu_executor.py:126] Maximum concurrency for 131072 tokens per request: 2.20x
+
+Generating responses...
+
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 196.52it/s, est. speed input: 15782.91 toks/s, output: 1375.89 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 208.18it/s, est. speed input: 16482.05 toks/s, output: 1458.10 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 210.83it/s, est. speed input: 16728.27 toks/s, output: 1476.09 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 211.28it/s, est. speed input: 16794.03 toks/s, output: 1479.27 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 210.12it/s, est. speed input: 16775.11 toks/s, output: 1471.11 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 210.89it/s, est. speed input: 16960.40 toks/s, output: 1476.52 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 210.44it/s, est. speed input: 16836.93 toks/s, output: 1473.36 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 128/128 [00:00<00:00, 210.67it/s, est. speed input: 16776.81 toks/s, output: 1475.00 toks/s]
+Processed prompts: 100%|██████████████████████████████████████| 243/243 [00:01<00:00, 197.10it/s, est. speed input: 15770.70 toks/s, output: 1379.86 toks/s]
+Generating responses: 100%|███████████████████████████████████████████| 9/9 [00:06<00:00,  1.41it/s]t. speed input: 15093.05 toks/s, output: 1321.28 toks/s]
+
+Evaluating responses...
+Evaluating answers: 100%|███████████████████████████████████| 1267/1267 [00:00<00:00, 825440.07it/s]
+Invalid outputs count: 0
+Evaluation range: start=0, end=9223372036854775807
+Total evaluated: 1267, Accuracy: 0.8540

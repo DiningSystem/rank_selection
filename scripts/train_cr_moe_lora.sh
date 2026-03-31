@@ -5,6 +5,7 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --moe_router_hidden_dim=128 \
   --lora_alpha=32 \
   --lr=1e-3 \
+  --scheduler=cosine \
   --hf_fast_download \
   --hf_preload \
   --hf_prefer_safetensors

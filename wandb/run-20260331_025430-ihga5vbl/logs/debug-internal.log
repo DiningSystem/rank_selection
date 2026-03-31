@@ -1,0 +1,16 @@
+{"time":"2026-03-31T02:54:30.889956378Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-03-31T02:54:30.889969754Z","level":"INFO","msg":"created symlink","path":"/home/gdi-user/enguyen/research_vllm/test/rank_selection/wandb/run-20260331_025430-ihga5vbl/logs/debug-core.log"}
+{"time":"2026-03-31T02:54:30.995875981Z","level":"INFO","msg":"created new stream","id":"ihga5vbl"}
+{"time":"2026-03-31T02:54:30.995935033Z","level":"INFO","msg":"stream: started","id":"ihga5vbl"}
+{"time":"2026-03-31T02:54:30.996153877Z","level":"INFO","msg":"writer: Do: started","stream_id":"ihga5vbl"}
+{"time":"2026-03-31T02:54:30.996340757Z","level":"INFO","msg":"handler: started","stream_id":"ihga5vbl"}
+{"time":"2026-03-31T02:54:30.996507045Z","level":"INFO","msg":"sender: started","stream_id":"ihga5vbl"}
+{"time":"2026-03-31T02:54:31.44544613Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-03-31T02:55:14.547055331Z","level":"INFO","msg":"stream: closing","id":"ihga5vbl"}
+{"time":"2026-03-31T02:55:14.547116519Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-03-31T02:55:14.548347538Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-03-31T02:55:18.067015829Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-03-31T02:55:18.355359381Z","level":"INFO","msg":"handler: closed","stream_id":"ihga5vbl"}
+{"time":"2026-03-31T02:55:18.355421038Z","level":"INFO","msg":"writer: Close: closed","stream_id":"ihga5vbl"}
+{"time":"2026-03-31T02:55:18.355437169Z","level":"INFO","msg":"sender: closed","stream_id":"ihga5vbl"}
+{"time":"2026-03-31T02:55:18.355528092Z","level":"INFO","msg":"stream: closed","id":"ihga5vbl"}
