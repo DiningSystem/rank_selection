@@ -25,6 +25,12 @@ PROMPT = (
     "### Instruction:\n{instruction}\n\n### Response:"
 )
 
+
+def has_supervised_tokens(example: Dict[str, Sequence[int]]) -> bool:
+    """Keep only samples that contain at least one non-ignored label token."""
+    labels = example.get("labels", [])
+    return any(label != IGNORE_INDEX for label in labels)
+
 def load_and_preprocess_data(task, tokenizer, args):
 
     if "mnli" in task:
@@ -233,6 +239,12 @@ def load_and_preprocess_it(tokenizer, args):
             "response": args.dataset_field[1]}
     )
 
+    train_dataset = train_dataset.filter(
+        has_supervised_tokens,
+        num_proc=8,
+        desc="Filtering samples without supervised tokens",
+    )
+
     return train_dataset
 
 
@@ -355,6 +367,12 @@ def load_and_preprocess_cr(tokenizer, args):
         generate_and_tokenize_prompt_wrapper,
         num_proc=8,
         remove_columns=data["train"].column_names  # Remove original columns
+    )
+
+    train_dataset = train_dataset.filter(
+        has_supervised_tokens,
+        num_proc=8,
+        desc="Filtering samples without supervised tokens",
     )
     
     return train_dataset

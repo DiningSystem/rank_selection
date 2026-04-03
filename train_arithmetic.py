@@ -100,7 +100,13 @@ def finetune():
 
     # Setup optimizer
     trainable_parameters = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(trainable_parameters, lr=args.lr)
+    optimizer = torch.optim.AdamW(
+        trainable_parameters,
+        lr=args.lr,
+        betas=(args.adam_beta1, args.adam_beta2),
+        eps=args.adam_eps,
+        weight_decay=args.weight_decay,
+    )
 
     if args.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -130,6 +136,7 @@ def finetune():
         dataloader_num_workers=args.dataloader_num_workers,
         group_by_length=True,
         remove_unused_columns=False,
+        max_grad_norm=args.max_grad_norm,
     )
     
     # Save training arguments
@@ -144,6 +151,7 @@ def finetune():
         optimizers=(optimizer, None),
         moe_entropy_loss_weight=args.moe_entropy_loss_weight,
         moe_load_balance_loss_weight=args.moe_load_balance_loss_weight,
+        moe_aux_loss_cap=args.moe_aux_loss_cap,
     )
 
     # Save tokenizer
@@ -186,6 +194,7 @@ if __name__ == "__main__":
     parser.add_argument("--moe_router_hidden_dim", type=int, default=128, help="Hidden dim for router MLP (set 0 for linear router)")
     parser.add_argument("--moe_entropy_loss_weight", type=float, default=0.01, help="Weight for MoE routing entropy regularizer")
     parser.add_argument("--moe_load_balance_loss_weight", type=float, default=0.01, help="Weight for MoE rank load balancing regularizer")
+    parser.add_argument("--moe_aux_loss_cap", type=float, default=0.5, help="Cap total MoE aux contribution as a fraction of base loss (0 disables)")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
     parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="cosine", help="Learning rate scheduler")
@@ -193,6 +202,11 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_ratio", type=float, default=0.02, help="Warmup ratio")
     parser.add_argument("--max_seq_length", type=int, default=512, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=0.01, help="Weight decay")
+    parser.add_argument("--adam_beta1", type=float, default=0.9, help="AdamW beta1")
+    parser.add_argument("--adam_beta2", type=float, default=0.95, help="AdamW beta2")
+    parser.add_argument("--adam_eps", type=float, default=1e-8, help="AdamW epsilon")
+    parser.add_argument("--max_grad_norm", type=float, default=0.3, help="Gradient clipping norm")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     parser.add_argument("--dataloader_num_workers", type=int, default=4, help="DataLoader worker count for faster input pipeline")
