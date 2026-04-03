@@ -3,9 +3,11 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --moe_r_max=32 \
   --moe_top_k=1 \
   --moe_router_hidden_dim=128 \
-  --lr=1e-4 \
+  --lr=5e-5 \
   --lora_alpha=32 \
-  --scheduler=cosine \
+  --scheduler=linear \
+  --moe_load_balance_loss_weight=0.1 \
+  --moe_entropy_loss_weight=0 \
   --hf_fast_download \
   --hf_preload \
   --hf_prefer_safetensors
