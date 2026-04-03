@@ -256,10 +256,18 @@ def create_peft_model_cr_moe_lora(model, args):
 class MoEAuxLossTrainer(Trainer):
     """Trainer with optional MoE routing regularizers."""
 
-    def __init__(self, *args, moe_entropy_loss_weight: float = 0.0, moe_load_balance_loss_weight: float = 0.0, **kwargs):
+    def __init__(
+        self,
+        *args,
+        moe_entropy_loss_weight: float = 0.0,
+        moe_load_balance_loss_weight: float = 0.0,
+        moe_aux_loss_cap: float = 0.0,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.moe_entropy_loss_weight = float(moe_entropy_loss_weight)
         self.moe_load_balance_loss_weight = float(moe_load_balance_loss_weight)
+        self.moe_aux_loss_cap = float(moe_aux_loss_cap)
         self._moe_layers = [m for m in self.model.modules() if isinstance(m, RankMoELoRALayer)]
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -269,6 +277,8 @@ class MoEAuxLossTrainer(Trainer):
         else:
             loss = outputs.loss
 
+        entropy_loss = None
+        load_balance_loss = None
         if self.moe_entropy_loss_weight != 0.0 or self.moe_load_balance_loss_weight != 0.0:
             entropy_terms = []
             load_balance_terms = []
@@ -284,5 +294,19 @@ class MoEAuxLossTrainer(Trainer):
             if load_balance_terms:
                 load_balance_loss = torch.stack(load_balance_terms).mean()
                 loss = loss + self.moe_load_balance_loss_weight * load_balance_loss
+            if self.moe_aux_loss_cap > 0.0 and (entropy_loss is not None or load_balance_loss is not None):
+                max_allowed = outputs["loss"].detach().abs() * self.moe_aux_loss_cap
+                total_aux = (loss - outputs["loss"]).abs()
+                if total_aux > max_allowed:
+                    aux_scale = (max_allowed / total_aux).detach()
+                    loss = outputs["loss"] + (loss - outputs["loss"]) * aux_scale
+
+        if self.state.global_step % max(self.args.logging_steps, 1) == 0:
+            log_payload = {"base_loss": float(outputs["loss"].detach().float())}
+            if entropy_loss is not None:
+                log_payload["moe_entropy_loss"] = float(entropy_loss.detach().float())
+            if load_balance_loss is not None:
+                log_payload["moe_load_balance_loss"] = float(load_balance_loss.detach().float())
+            self.log(log_payload)
 
         return (loss, outputs) if return_outputs else loss
