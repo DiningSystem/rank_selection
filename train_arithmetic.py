@@ -192,9 +192,9 @@ if __name__ == "__main__":
     parser.add_argument("--moe_r_max", type=int, default=32, help="Rank-MoE maximum rank components (r_max)")
     parser.add_argument("--moe_top_k", type=int, default=1, help="Top-k routed experts per token for MoE-LoRA")
     parser.add_argument("--moe_router_hidden_dim", type=int, default=128, help="Hidden dim for router MLP (set 0 for linear router)")
-    parser.add_argument("--moe_entropy_loss_weight", type=float, default=0.01, help="Weight for MoE routing entropy regularizer")
-    parser.add_argument("--moe_load_balance_loss_weight", type=float, default=0.01, help="Weight for MoE rank load balancing regularizer")
-    parser.add_argument("--moe_aux_loss_cap", type=float, default=0.5, help="Cap total MoE aux contribution as a fraction of base loss (0 disables)")
+    parser.add_argument("--moe_entropy_loss_weight", type=float, default=0.001, help="Weight for MoE routing entropy regularizer")
+    parser.add_argument("--moe_load_balance_loss_weight", type=float, default=0.001, help="Weight for MoE rank load balancing regularizer")
+    parser.add_argument("--moe_aux_loss_cap", type=float, default=0.2, help="Cap total MoE aux contribution as a fraction of base loss (0 disables)")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
     parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="cosine", help="Learning rate scheduler")
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_grad_norm", type=float, default=0.3, help="Gradient clipping norm")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
-    parser.add_argument("--dataloader_num_workers", type=int, default=4, help="DataLoader worker count for faster input pipeline")
+    parser.add_argument("--dataloader_num_workers", type=int, default=16, help="DataLoader worker count for faster input pipeline")
         
     args = parser.parse_args()
 

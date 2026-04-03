@@ -6,8 +6,6 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --lr=5e-5 \
   --lora_alpha=32 \
   --scheduler=linear \
-  --moe_load_balance_loss_weight=0.1 \
-  --moe_entropy_loss_weight=0 \
   --hf_fast_download \
   --hf_preload \
   --hf_prefer_safetensors
