@@ -220,6 +220,9 @@ def create_peft_model_it_moe_lora(model, args):
         router_hidden_dim=router_hidden_dim,
         entropy_loss_weight=args.moe_entropy_loss_weight,
         load_balance_loss_weight=args.moe_load_balance_loss_weight,
+        mask_init_strategy=args.moe_mask_init_strategy,
+        mask_init_value=args.moe_mask_init_value,
+        mask_init_std=args.moe_mask_init_std,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
     )
@@ -241,6 +244,9 @@ def create_peft_model_cr_moe_lora(model, args):
         router_hidden_dim=router_hidden_dim,
         entropy_loss_weight=args.moe_entropy_loss_weight,
         load_balance_loss_weight=args.moe_load_balance_loss_weight,
+        mask_init_strategy=args.moe_mask_init_strategy,
+        mask_init_value=args.moe_mask_init_value,
+        mask_init_std=args.moe_mask_init_std,
         target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
         freeze_base=True,
     )
