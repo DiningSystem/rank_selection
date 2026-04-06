@@ -48,6 +48,9 @@ class RankMoELoRALayer(nn.Module):
         bias: bool = True,
         freeze_base: bool = True,
         track_router_losses: bool = False,
+        mask_init_strategy: str = "sigmoid",
+        mask_init_value: float = 0.9,
+        mask_init_std: float = 0.0,
     ) -> None:
         super().__init__()
         if r_max <= 0:
@@ -60,6 +63,15 @@ class RankMoELoRALayer(nn.Module):
         self.r_max = r_max
         self.top_k = min(top_k, r_max)
         self.track_router_losses = track_router_losses
+        if mask_init_strategy not in {"sigmoid", "xavier_norm"}:
+            raise ValueError(f"mask_init_strategy must be one of ['sigmoid', 'xavier_norm'], got {mask_init_strategy}")
+        if mask_init_strategy == "sigmoid" and not (0.0 < mask_init_value < 1.0):
+            raise ValueError(f"mask_init_value must be in (0, 1), got {mask_init_value}")
+        if mask_init_std < 0.0:
+            raise ValueError(f"mask_init_std must be >= 0, got {mask_init_std}")
+        self.mask_init_strategy = str(mask_init_strategy)
+        self.mask_init_value = float(mask_init_value)
+        self.mask_init_std = float(mask_init_std)
 
         self.base = nn.Linear(d_in, d_out, bias=bias)
         if freeze_base:
@@ -87,6 +99,19 @@ class RankMoELoRALayer(nn.Module):
     def reset_parameters(self) -> None:
         nn.init.normal_(self.B, mean=0.0, std=0.02)
         nn.init.normal_(self.A, mean=0.0, std=0.02)
+        with torch.no_grad():
+            if self.mask_init_strategy == "sigmoid":
+                eps = 1e-6
+                init_value = min(max(self.mask_init_value, eps), 1.0 - eps)
+                init_logit = torch.logit(torch.tensor(init_value, dtype=self.S_a.dtype, device=self.S_a.device))
+                self.S_a.fill_(init_logit)
+                self.S_b.fill_(init_logit)
+            else:
+                nn.init.xavier_uniform_(self.S_a)
+                nn.init.xavier_uniform_(self.S_b)
+            if self.mask_init_std > 0.0:
+                self.S_a.add_(torch.randn_like(self.S_a) * self.mask_init_std)
+                self.S_b.add_(torch.randn_like(self.S_b) * self.mask_init_std)
 
     @classmethod
     def from_linear(
@@ -97,6 +122,9 @@ class RankMoELoRALayer(nn.Module):
         router_hidden_dim: int = 128,
         freeze_base: bool = True,
         track_router_losses: bool = False,
+        mask_init_strategy: str = "sigmoid",
+        mask_init_value: float = 0.9,
+        mask_init_std: float = 0.0,
     ) -> "RankMoELoRALayer":
         layer = cls(
             d_in=linear.in_features,
@@ -107,6 +135,9 @@ class RankMoELoRALayer(nn.Module):
             bias=linear.bias is not None,
             freeze_base=freeze_base,
             track_router_losses=track_router_losses,
+            mask_init_strategy=mask_init_strategy,
+            mask_init_value=mask_init_value,
+            mask_init_std=mask_init_std,
         )
         layer = layer.to(device=linear.weight.device, dtype=linear.weight.dtype)
         with torch.no_grad():
@@ -129,8 +160,15 @@ class RankMoELoRALayer(nn.Module):
         return masked / denom
 
     def masked_factors(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        m_b = torch.sigmoid(self.S_b)
-        m_a = torch.sigmoid(self.S_a)
+        if self.mask_init_strategy == "sigmoid":
+            m_b = torch.sigmoid(self.S_b)
+            m_a = torch.sigmoid(self.S_a)
+        else:
+            # Xavier-initialized raw masks (no sigmoid), normalized per-rank/per-output before use.
+            m_a = self.S_a.abs()
+            m_b = self.S_b.abs()
+            m_a = m_a / m_a.amax(dim=-1, keepdim=True).clamp_min(1e-9)
+            m_b = m_b / m_b.amax(dim=0, keepdim=True).clamp_min(1e-9)
         b_tilde = self.B * m_b
         a_tilde = self.A * m_a
         return a_tilde, b_tilde, m_a, m_b
@@ -263,6 +301,9 @@ class MoELoRAConfig:
     router_hidden_dim: Optional[int] = None
     entropy_loss_weight: float = 0.0
     load_balance_loss_weight: float = 0.0
+    mask_init_strategy: str = "sigmoid"
+    mask_init_value: float = 0.9
+    mask_init_std: float = 0.0
     target_modules: Optional[Sequence[str]] = None
     freeze_base: bool = True
 
@@ -273,6 +314,12 @@ class MoELoRAConfig:
             raise ValueError("experts_config cannot be empty")
         if self.r_max is not None and self.r_max <= 0:
             raise ValueError("r_max must be > 0 when provided")
+        if self.mask_init_strategy not in {"sigmoid", "xavier_norm"}:
+            raise ValueError("mask_init_strategy must be one of ['sigmoid', 'xavier_norm']")
+        if self.mask_init_strategy == "sigmoid" and not (0.0 < float(self.mask_init_value) < 1.0):
+            raise ValueError("mask_init_value must be in (0, 1) when mask_init_strategy='sigmoid'")
+        if float(self.mask_init_std) < 0.0:
+            raise ValueError("mask_init_std must be >= 0")
 
     @property
     def resolved_r_max(self) -> int:
@@ -423,6 +470,9 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
                 router_hidden_dim=router_hidden,
                 freeze_base=config.freeze_base,
                 track_router_losses=(config.entropy_loss_weight != 0.0 or config.load_balance_loss_weight != 0.0),
+                mask_init_strategy=config.mask_init_strategy,
+                mask_init_value=config.mask_init_value,
+                mask_init_std=config.mask_init_std,
             )
             setattr(parent, target_name, wrapped)
             model.adapter_layers.add(name)
