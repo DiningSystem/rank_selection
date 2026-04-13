@@ -33,6 +33,44 @@ from tqdm import tqdm
 from peft.utils import _get_submodules
 from huggingface_hub import snapshot_download
 
+def create_moe_optimizer_param_groups(model, args):
+    """Build optimizer groups tuned for MoE-LoRA training stability."""
+    lr = float(args.lr)
+    router_lr = float(getattr(args, "moe_router_lr", lr))
+    lora_weight_decay = float(getattr(args, "moe_lora_weight_decay", args.weight_decay))
+    router_weight_decay = float(getattr(args, "moe_router_weight_decay", 0.0))
+    no_decay_terms = ("bias", "norm", "ln_", "layernorm")
+
+    lora_decay, lora_no_decay = [], []
+    router_decay, router_no_decay = [], []
+    other_trainable = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        lower_name = name.lower()
+        is_no_decay = any(term in lower_name for term in no_decay_terms)
+        if "router" in lower_name:
+            (router_no_decay if is_no_decay else router_decay).append(param)
+        elif any(tag in lower_name for tag in ("lora", ".a", ".b", "s_a", "s_b")):
+            (lora_no_decay if is_no_decay else lora_decay).append(param)
+        else:
+            other_trainable.append(param)
+
+    param_groups = []
+    if lora_decay:
+        param_groups.append({"params": lora_decay, "lr": lr, "weight_decay": lora_weight_decay})
+    if lora_no_decay:
+        param_groups.append({"params": lora_no_decay, "lr": lr, "weight_decay": 0.0})
+    if router_decay:
+        param_groups.append({"params": router_decay, "lr": router_lr, "weight_decay": router_weight_decay})
+    if router_no_decay:
+        param_groups.append({"params": router_no_decay, "lr": router_lr, "weight_decay": 0.0})
+    if other_trainable:
+        param_groups.append({"params": other_trainable, "lr": lr, "weight_decay": lora_weight_decay})
+
+    return param_groups
+
 def _configure_hf_download(args):
     if getattr(args, "hf_fast_download", False):
         os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
