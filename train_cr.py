@@ -99,14 +99,24 @@ def finetune():
 
 
     # Setup optimizer
-    trainable_parameters = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(
-        trainable_parameters,
-        lr=args.lr,
-        betas=(args.adam_beta1, args.adam_beta2),
-        eps=args.adam_eps,
-        weight_decay=args.weight_decay,
-    )
+    if args.peft_method == "moe_lora":
+        optimizer_groups = create_moe_optimizer_param_groups(model, args)
+        optimizer = torch.optim.AdamW(
+            optimizer_groups,
+            lr=args.lr,
+            betas=(args.adam_beta1, args.adam_beta2),
+            eps=args.adam_eps,
+            weight_decay=0.0,
+        )
+    else:
+        trainable_parameters = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.AdamW(
+            trainable_parameters,
+            lr=args.lr,
+            betas=(args.adam_beta1, args.adam_beta2),
+            eps=args.adam_eps,
+            weight_decay=args.weight_decay,
+        )
 
     if args.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -145,14 +155,22 @@ def finetune():
         json.dump(training_args.to_dict(), f, indent=4)
     
     
+    moe_entropy_loss_weight = args.moe_entropy_loss_weight
+    if args.peft_method == "moe_lora" and args.moe_top_k <= 1:
+        # With top-1 routing, entropy is nearly always ~0 and adds mostly noise.
+        moe_entropy_loss_weight = 0.0
+        wandb.log({"moe_entropy_loss_disabled_top1": 1})
+
     trainer = MoEAuxLossTrainer(
         model=model,
         args=training_args,
         **data_module,
         optimizers=(optimizer, None),
-        moe_entropy_loss_weight=args.moe_entropy_loss_weight,
+        moe_entropy_loss_weight=moe_entropy_loss_weight,
         moe_load_balance_loss_weight=args.moe_load_balance_loss_weight,
         moe_aux_loss_cap=args.moe_aux_loss_cap,
+        moe_aux_warmup_ratio=args.moe_aux_warmup_ratio,
+        moe_aux_stop_ratio=args.moe_aux_stop_ratio,
     )
     
     # # Save tokenizer
@@ -200,6 +218,11 @@ if __name__ == "__main__":
     parser.add_argument("--moe_mask_init_value", type=float, default=0.9, help="Initial sigmoid value for MoE mask logits")
     parser.add_argument("--moe_mask_init_std", type=float, default=0.0, help="Std-dev noise added to initial MoE mask logits")
     parser.add_argument("--moe_aux_loss_cap", type=float, default=0.2, help="Cap total MoE aux contribution as a fraction of base loss (0 disables)")
+    parser.add_argument("--moe_aux_warmup_ratio", type=float, default=0.1, help="Warm up MoE aux loss weights linearly over this fraction of training")
+    parser.add_argument("--moe_aux_stop_ratio", type=float, default=0.6, help="Disable MoE aux losses after this training progress fraction")
+    parser.add_argument("--moe_router_lr", type=float, default=1e-4, help="Router learning rate (often lower than LoRA LR for stable routing)")
+    parser.add_argument("--moe_lora_weight_decay", type=float, default=0.01, help="Weight decay for LoRA/MoE adapter matrices")
+    parser.add_argument("--moe_router_weight_decay", type=float, default=0.0, help="Weight decay for router parameters")
     parser.add_argument("--batch_size", type=int, default=6, help="Batch size")
     parser.add_argument("--grad_acc_steps", type=int, default=24, help="Gradient accumulation steps")
 
