@@ -72,8 +72,12 @@ def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top
             r_max = int(v.shape[0])
             break
     for k, v in state_dict.items():
-        if k.endswith("router.net.0.weight") and getattr(v, "ndim", 0) >= 2:
+        # Router block is: LayerNorm -> Linear(d_model, hidden) -> GELU -> Linear(hidden, r_max).
+        if k.endswith("router.net.1.weight") and getattr(v, "ndim", 0) >= 2:
             router_hidden_dim = int(v.shape[0])
+            break
+        if k.endswith("router.net.3.weight") and getattr(v, "ndim", 0) >= 2:
+            router_hidden_dim = int(v.shape[1])
             break
 
     top_k = int(fallback_top_k)
