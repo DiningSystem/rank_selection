@@ -8,6 +8,7 @@ BASE_MODEL=${BASE_MODEL:-""}
 PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
 VLLM_BATCH_SIZE_CR=${VLLM_BATCH_SIZE_CR:-128}
 HF_BATCH_SIZE_CR=${HF_BATCH_SIZE_CR:-128}
+EVAL_BACKEND=${EVAL_BACKEND:-hf_moe}
 EVAL_TEMPERATURE=${EVAL_TEMPERATURE:-0.0}
 EVAL_TOP_P=${EVAL_TOP_P:-1.0}
 EVAL_TOP_K=${EVAL_TOP_K:--1}
@@ -62,14 +63,12 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
 
   EVAL_MODEL_PATH=$(prepare_eval_model_if_needed "$MODEL_PATH" "$RUN_ROOT" "$BASE_MODEL" "$PREPARE_MOE_EVAL" "$EVAL_MODEL_PATH" | tail -n 1)
 
-  BACKEND_MODE="auto"
+  BACKEND_MODE="$EVAL_BACKEND"
   EFFECTIVE_CR_BS="$VLLM_BATCH_SIZE_CR"
-  IS_ADAPTIVE=$(is_adaptive_checkpoint "$EVAL_MODEL_PATH")
-  if [ "$IS_ADAPTIVE" = "1" ]; then
-    BACKEND_MODE="hf_moe"
+  if [ "$BACKEND_MODE" = "hf_moe" ]; then
     EFFECTIVE_CR_BS="$HF_BATCH_SIZE_CR"
-    echo "=== Adaptive MoE detected: using backend=$BACKEND_MODE with reduced batch size (${EFFECTIVE_CR_BS}) ==="
   fi
+  echo "=== Using backend=$BACKEND_MODE for MoE eval (batch_size=${EFFECTIVE_CR_BS}) ==="
 
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
