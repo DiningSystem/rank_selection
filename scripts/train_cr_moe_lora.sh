@@ -1,11 +1,31 @@
 CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --peft_method=moe_lora \
+  --epochs=2 \
   --moe_r_max=32 \
-  --moe_top_k=1 \
+  --moe_top_k=2 \
   --moe_router_hidden_dim=128 \
-  --lr=5e-5 \
+  --lr=8e-5 \
+  --moe_router_lr=3e-5 \
+  --moe_entropy_loss_weight=5e-5 \
+  --moe_load_balance_loss_weight=5e-4 \
+  --moe_aux_loss_cap=0.05 \
+  --moe_aux_warmup_ratio=0.1 \
+  --moe_aux_stop_ratio=0.9 \
+  --moe_lora_weight_decay=0.01 \
+  --moe_router_weight_decay=0.01 \
+  --moe_mask_init_value=0.85 \
+  --lora_dropout=0.08 \
+  --warmup_ratio=0.06 \
+  --scheduler=cosine \
+  --adam_beta1=0.9 \
+  --adam_beta2=0.98 \
+  --max_grad_norm=0.3 \
+  --batch_size=6 \
+  --grad_acc_steps=24 \
   --lora_alpha=32 \
-  --scheduler=linear \
+  --seed=123 \
+  --gradient_checkpointing \
+  --dataloader_num_workers=4 \
   --hf_fast_download \
   --hf_preload \
   --hf_prefer_safetensors

@@ -42,8 +42,11 @@ def _infer_r_max(checkpoint_dir: str, fallback_r_max: int) -> int:
 def _infer_router_hidden_dim(checkpoint_dir: str, fallback_hidden: int) -> int:
     state_dict = load_moe_checkpoint_state_dict(checkpoint_dir)
     for key, value in state_dict.items():
-        if key.endswith("router.net.0.weight") and value.ndim >= 2:
+        # Router block is LayerNorm -> Linear(d_model, hidden) -> GELU -> Linear(hidden, r_max).
+        if key.endswith("router.net.1.weight") and value.ndim >= 2:
             return int(value.shape[0])
+        if key.endswith("router.net.3.weight") and value.ndim >= 2:
+            return int(value.shape[1])
     return int(fallback_hidden)
 
 
