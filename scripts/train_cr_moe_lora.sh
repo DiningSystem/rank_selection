@@ -6,7 +6,7 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --moe_router_hidden_dim=128 \
   --moe_router_norm_type=rmsnorm \
   --moe_router_activation=silu \
-  --lr=1.5e-4 \
+  --lr=8e-4 \
   --moe_router_lr=2e-5 \
   --moe_entropy_loss_weight=2e-5 \
   --moe_load_balance_loss_weight=2e-4 \
@@ -27,7 +27,7 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --lora_alpha=32 \
   --seed=123 \
   --gradient_checkpointing \
-  --dataloader_num_workers=4 \
+  --dataloader_num_workers=16 \
   --hf_fast_download \
   --hf_preload \
   --hf_prefer_safetensors
