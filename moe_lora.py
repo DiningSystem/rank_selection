@@ -16,12 +16,40 @@ class RankRouter(nn.Module):
     g(x) in R^{batch x r_max}
     """
 
-    def __init__(self, d_model: int, r_max: int, hidden_dim: int) -> None:
+    def __init__(
+        self,
+        d_model: int,
+        r_max: int,
+        hidden_dim: int,
+        norm_type: str = "layernorm",
+        activation: str = "gelu",
+    ) -> None:
         super().__init__()
+        norm_type = norm_type.lower()
+        activation = activation.lower()
+
+        if norm_type == "layernorm":
+            norm_layer = nn.LayerNorm(d_model)
+        elif norm_type == "rmsnorm":
+            norm_layer = nn.RMSNorm(d_model)
+        elif norm_type == "none":
+            norm_layer = nn.Identity()
+        else:
+            raise ValueError(f"Unsupported router norm_type: {norm_type}")
+
+        if activation == "gelu":
+            activation_layer = nn.GELU()
+        elif activation == "silu":
+            activation_layer = nn.SiLU()
+        elif activation == "relu":
+            activation_layer = nn.ReLU()
+        else:
+            raise ValueError(f"Unsupported router activation: {activation}")
+
         self.net = nn.Sequential(
-            nn.LayerNorm(d_model),
+            norm_layer,
             nn.Linear(d_model, hidden_dim),
-            nn.GELU(),
+            activation_layer,
             nn.Linear(hidden_dim, r_max),
         )
 
@@ -45,6 +73,8 @@ class RankMoELoRALayer(nn.Module):
         r_max: int,
         top_k: int = 1,
         router_hidden_dim: int = 128,
+        router_norm_type: str = "layernorm",
+        router_activation: str = "gelu",
         bias: bool = True,
         freeze_base: bool = True,
         track_router_losses: bool = False,
@@ -86,7 +116,13 @@ class RankMoELoRALayer(nn.Module):
         self.S_b = nn.Parameter(torch.zeros(d_out, r_max))
         self.S_a = nn.Parameter(torch.zeros(r_max, d_in))
 
-        self.router = RankRouter(d_model=d_in, r_max=r_max, hidden_dim=router_hidden_dim)
+        self.router = RankRouter(
+            d_model=d_in,
+            r_max=r_max,
+            hidden_dim=router_hidden_dim,
+            norm_type=router_norm_type,
+            activation=router_activation,
+        )
 
         self.register_buffer("rank_usage_counts", torch.zeros(r_max), persistent=False)
         self.register_buffer("routed_token_count", torch.tensor(0.0), persistent=False)
@@ -120,6 +156,8 @@ class RankMoELoRALayer(nn.Module):
         r_max: int,
         top_k: int = 1,
         router_hidden_dim: int = 128,
+        router_norm_type: str = "layernorm",
+        router_activation: str = "gelu",
         freeze_base: bool = True,
         track_router_losses: bool = False,
         mask_init_strategy: str = "sigmoid",
@@ -132,6 +170,8 @@ class RankMoELoRALayer(nn.Module):
             r_max=r_max,
             top_k=top_k,
             router_hidden_dim=router_hidden_dim,
+            router_norm_type=router_norm_type,
+            router_activation=router_activation,
             bias=linear.bias is not None,
             freeze_base=freeze_base,
             track_router_losses=track_router_losses,
@@ -299,6 +339,8 @@ class MoELoRAConfig:
     r_max: Optional[int] = None
     top_k: int = 1
     router_hidden_dim: Optional[int] = None
+    router_norm_type: str = "layernorm"
+    router_activation: str = "gelu"
     entropy_loss_weight: float = 0.0
     load_balance_loss_weight: float = 0.0
     mask_init_strategy: str = "sigmoid"
@@ -316,6 +358,10 @@ class MoELoRAConfig:
             raise ValueError("r_max must be > 0 when provided")
         if self.mask_init_strategy not in {"sigmoid", "xavier_norm"}:
             raise ValueError("mask_init_strategy must be one of ['sigmoid', 'xavier_norm']")
+        if self.router_norm_type not in {"layernorm", "rmsnorm", "none"}:
+            raise ValueError("router_norm_type must be one of ['layernorm', 'rmsnorm', 'none']")
+        if self.router_activation not in {"gelu", "silu", "relu"}:
+            raise ValueError("router_activation must be one of ['gelu', 'silu', 'relu']")
         if self.mask_init_strategy == "sigmoid" and not (0.0 < float(self.mask_init_value) < 1.0):
             raise ValueError("mask_init_value must be in (0, 1) when mask_init_strategy='sigmoid'")
         if float(self.mask_init_std) < 0.0:
@@ -468,6 +514,8 @@ def apply_moe_lora(model: nn.Module, config: MoELoRAConfig):
                 r_max=config.resolved_r_max,
                 top_k=config.top_k,
                 router_hidden_dim=router_hidden,
+                router_norm_type=config.router_norm_type,
+                router_activation=config.router_activation,
                 freeze_base=config.freeze_base,
                 track_router_losses=(config.entropy_loss_weight != 0.0 or config.load_balance_loss_weight != 0.0),
                 mask_init_strategy=config.mask_init_strategy,

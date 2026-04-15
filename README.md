@@ -93,6 +93,19 @@ bash scripts/train_cr.sh
 
 This script will fine-tune a model on the Commonsense170K dataset. You can modify the `model` parameter to explore various models. The script will save the fine-tuned adapters.
 
+For MoE-LoRA CR training, a strong default starting point is:
+
+```bash
+bash scripts/train_cr_moe_lora.sh
+```
+
+This preset uses a stability-oriented setup (`r_max=32`, `top_k=2`, lower router LR, clipped gradients, and longer warmup) with router defaults that work well on LLaMA-family models:
+
+- `--moe_router_norm_type=rmsnorm`
+- `--moe_router_activation=silu`
+
+If your run is still volatile, try `--moe_top_k=1` first (more stable routing, sometimes slightly lower peak accuracy).
+
 Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
 bash scripts/cr_merge_eval.sh
