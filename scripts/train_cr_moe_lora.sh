@@ -23,7 +23,7 @@ CUDA_VISIBLE_DEVICES=0 python train_cr.py \
   --adam_beta2=0.98 \
   --max_grad_norm=0.25 \
   --batch_size=6 \
-  --grad_acc_steps=24 \
+  --grad_acc_steps=32 \
   --lora_alpha=32 \
   --seed=123 \
   --gradient_checkpointing \
