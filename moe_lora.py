@@ -92,6 +92,8 @@ class RankMoELoRALayer(nn.Module):
         self.d_out = d_out
         self.r_max = r_max
         self.top_k = min(top_k, r_max)
+        self.runtime_top_k = self.top_k
+        self.routing_temperature = 1.0
         self.track_router_losses = track_router_losses
         if mask_init_strategy not in {"sigmoid", "xavier_norm"}:
             raise ValueError(f"mask_init_strategy must be one of ['sigmoid', 'xavier_norm'], got {mask_init_strategy}")
@@ -191,9 +193,10 @@ class RankMoELoRALayer(nn.Module):
         return x.reshape(-1, x.shape[-1]), original_shape
 
     def _topk_normalize(self, g: torch.Tensor) -> torch.Tensor:
-        if self.top_k >= self.r_max:
+        active_top_k = max(1, min(int(getattr(self, "runtime_top_k", self.top_k)), self.r_max))
+        if active_top_k >= self.r_max:
             return g
-        top_vals, top_idx = torch.topk(g, k=self.top_k, dim=-1)
+        top_vals, top_idx = torch.topk(g, k=active_top_k, dim=-1)
         masked = torch.zeros_like(g)
         masked.scatter_(1, top_idx, top_vals)
         denom = masked.sum(dim=-1, keepdim=True).clamp_min(1e-9)
@@ -224,7 +227,8 @@ class RankMoELoRALayer(nn.Module):
         router_dtype = next(self.router.parameters()).dtype
         router_in = x_2d if x_2d.dtype == router_dtype else x_2d.to(router_dtype)
         g_logits = self.router(router_in)
-        g = F.softmax(g_logits, dim=-1)
+        temperature = max(float(getattr(self, "routing_temperature", 1.0)), 1e-4)
+        g = F.softmax(g_logits / temperature, dim=-1)
         g = self._topk_normalize(g)
         entropy = None
         load_balance = None
@@ -325,6 +329,12 @@ class RankMoELoRALayer(nn.Module):
         rank_probs = g_.mean(dim=0)
         uniform = torch.full_like(rank_probs, 1.0 / rank_probs.numel())
         return torch.sum((rank_probs - uniform) ** 2)
+
+    def set_routing_temperature(self, temperature: float) -> None:
+        self.routing_temperature = max(float(temperature), 1e-4)
+
+    def set_runtime_top_k(self, top_k: int) -> None:
+        self.runtime_top_k = max(1, min(int(top_k), self.r_max))
 
     def debug_rank1_equivalence(self) -> torch.Tensor:
         a_tilde, b_tilde, _, _ = self.masked_factors()

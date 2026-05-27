@@ -168,6 +168,10 @@ def finetune():
         optimizers=(optimizer, None),
         moe_entropy_loss_weight=moe_entropy_loss_weight,
         moe_load_balance_loss_weight=args.moe_load_balance_loss_weight,
+        moe_mask_l1_loss_weight=args.moe_mask_l1_loss_weight,
+        moe_router_temperature_start=args.moe_router_temperature_start,
+        moe_router_temperature_end=args.moe_router_temperature_end,
+        moe_topk_warmup_ratio=args.moe_topk_warmup_ratio,
         moe_aux_loss_cap=args.moe_aux_loss_cap,
         moe_aux_warmup_ratio=args.moe_aux_warmup_ratio,
         moe_aux_stop_ratio=args.moe_aux_stop_ratio,
@@ -216,6 +220,10 @@ if __name__ == "__main__":
     parser.add_argument("--moe_router_activation", type=str, default="gelu", choices=["gelu", "silu", "relu"], help="Activation in MoE router MLP")
     parser.add_argument("--moe_entropy_loss_weight", type=float, default=0.001, help="Weight for MoE routing entropy regularizer")
     parser.add_argument("--moe_load_balance_loss_weight", type=float, default=0.001, help="Weight for MoE rank load balancing regularizer")
+    parser.add_argument("--moe_mask_l1_loss_weight", type=float, default=0.0, help="Weight for MoE mask L1 sparsity regularizer")
+    parser.add_argument("--moe_router_temperature_start", type=float, default=1.5, help="Initial router softmax temperature")
+    parser.add_argument("--moe_router_temperature_end", type=float, default=1.0, help="Final router softmax temperature")
+    parser.add_argument("--moe_topk_warmup_ratio", type=float, default=0.1, help="Fraction of training with dense routing (top_k=r_max) before hard top-k")
     parser.add_argument("--moe_mask_init_strategy", type=str, default="sigmoid", choices=["sigmoid", "xavier_norm"], help="Mask init strategy: sigmoid logits or xavier-initialized normalized masks")
     parser.add_argument("--moe_mask_init_value", type=float, default=0.9, help="Initial sigmoid value for MoE mask logits")
     parser.add_argument("--moe_mask_init_std", type=float, default=0.0, help="Std-dev noise added to initial MoE mask logits")

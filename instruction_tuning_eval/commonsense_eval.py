@@ -22,23 +22,39 @@ MAX_INT = sys.maxsize
 
 
 def extract_answer(dataset: str, sentence: str) -> str:
-    """Extract the answer from model output based on dataset type."""
+    """Extract the answer from model output based on dataset type.
+
+    Commonsense generations can be verbose (for example: "not solution1,
+    solution2 is correct").  Taking the first label occurrence can therefore
+    undercount PIQA and other two-choice tasks.  Prefer labels that appear in
+    explicit final-answer phrases, then fall back to the last label mentioned.
+    """
     sentence_ = sentence.strip().lower()
-    
+
     if dataset == 'boolq':
-        pred_answers = re.findall(r'true|false', sentence_)
+        answer_pattern = r'true|false'
     elif dataset == 'piqa':
-        pred_answers = re.findall(r'solution1|solution2', sentence_)
+        answer_pattern = r'solution1|solution2'
     elif dataset in ['social_i_qa', 'ARC-Challenge', 'ARC-Easy', 'openbookqa']:
-        pred_answers = re.findall(r'answer1|answer2|answer3|answer4|answer5', sentence_)
+        answer_pattern = r'answer1|answer2|answer3|answer4|answer5'
     elif dataset == 'hellaswag':
-        pred_answers = re.findall(r'ending1|ending2|ending3|ending4', sentence_)
+        answer_pattern = r'ending1|ending2|ending3|ending4'
     elif dataset == 'winogrande':
-        pred_answers = re.findall(r'option1|option2', sentence_)
+        answer_pattern = r'option1|option2'
     else:
         raise ValueError(f"Unsupported dataset: {dataset}")
-        
-    return pred_answers[0] if pred_answers else ""
+
+    final_answer_patterns = [
+        rf'(?:correct answer|answer|response|therefore|so)\s*(?:is|:|=)?\s*({answer_pattern})',
+        rf'({answer_pattern})\s*(?:is|seems|appears)?\s*(?:the )?(?:correct|best|right)',
+    ]
+    for pattern in final_answer_patterns:
+        phrase_answers = re.findall(pattern, sentence_)
+        if phrase_answers:
+            return phrase_answers[-1]
+
+    pred_answers = re.findall(answer_pattern, sentence_)
+    return pred_answers[-1] if pred_answers else ""
 
 
 def batch_data(data_list, batch_size=1):
