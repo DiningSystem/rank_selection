@@ -309,6 +309,10 @@ class MoEAuxLossTrainer(Trainer):
         *args,
         moe_entropy_loss_weight: float = 0.0,
         moe_load_balance_loss_weight: float = 0.0,
+        moe_mask_l1_loss_weight: float = 0.0,
+        moe_router_temperature_start: float = 1.0,
+        moe_router_temperature_end: float = 1.0,
+        moe_topk_warmup_ratio: float = 0.0,
         moe_aux_loss_cap: float = 0.0,
         moe_aux_warmup_ratio: float = 0.0,
         moe_aux_stop_ratio: float = 1.0,
@@ -317,6 +321,10 @@ class MoEAuxLossTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.moe_entropy_loss_weight = float(moe_entropy_loss_weight)
         self.moe_load_balance_loss_weight = float(moe_load_balance_loss_weight)
+        self.moe_mask_l1_loss_weight = float(moe_mask_l1_loss_weight)
+        self.moe_router_temperature_start = float(moe_router_temperature_start)
+        self.moe_router_temperature_end = float(moe_router_temperature_end)
+        self.moe_topk_warmup_ratio = float(moe_topk_warmup_ratio)
         self.moe_aux_loss_cap = float(moe_aux_loss_cap)
         self.moe_aux_warmup_ratio = float(moe_aux_warmup_ratio)
         self.moe_aux_stop_ratio = float(moe_aux_stop_ratio)
@@ -325,12 +333,26 @@ class MoEAuxLossTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         outputs = model(**inputs)
         if isinstance(outputs, dict):
-            loss = outputs["loss"]
+            base_loss = outputs["loss"]
         else:
-            loss = outputs.loss
+            base_loss = outputs.loss
+        loss = base_loss
 
         max_steps = max(int(getattr(self.state, "max_steps", 0) or 0), 1)
         progress = float(self.state.global_step) / float(max_steps)
+
+        # Router schedule: smooth routing early, sharpen later.
+        temperature_progress = min(max(progress, 0.0), 1.0)
+        current_temperature = self.moe_router_temperature_start + (
+            self.moe_router_temperature_end - self.moe_router_temperature_start
+        ) * temperature_progress
+        for module in self._moe_layers:
+            module.set_routing_temperature(current_temperature)
+            if self.moe_topk_warmup_ratio > 0.0 and progress < self.moe_topk_warmup_ratio:
+                module.set_runtime_top_k(module.r_max)
+            else:
+                module.set_runtime_top_k(module.top_k)
+
         aux_scale = 1.0
         if self.moe_aux_stop_ratio > 0.0 and progress >= self.moe_aux_stop_ratio:
             aux_scale = 0.0
@@ -339,17 +361,22 @@ class MoEAuxLossTrainer(Trainer):
 
         effective_entropy_weight = self.moe_entropy_loss_weight * aux_scale
         effective_load_balance_weight = self.moe_load_balance_loss_weight * aux_scale
+        effective_mask_l1_weight = self.moe_mask_l1_loss_weight * aux_scale
 
         entropy_loss = None
         load_balance_loss = None
-        if effective_entropy_weight != 0.0 or effective_load_balance_weight != 0.0:
+        mask_l1_loss = None
+        if effective_entropy_weight != 0.0 or effective_load_balance_weight != 0.0 or effective_mask_l1_weight != 0.0:
             entropy_terms = []
             load_balance_terms = []
+            mask_l1_terms = []
             for module in self._moe_layers:
                 if effective_entropy_weight != 0.0 and module._last_rank_entropy_loss is not None:
                     entropy_terms.append(module._last_rank_entropy_loss)
                 if effective_load_balance_weight != 0.0 and module._last_load_balance_loss is not None:
                     load_balance_terms.append(module._last_load_balance_loss)
+                if effective_mask_l1_weight != 0.0:
+                    mask_l1_terms.append(module.mask_sparsity_loss())
 
             if entropy_terms:
                 entropy_loss = torch.stack(entropy_terms).mean()
@@ -357,23 +384,32 @@ class MoEAuxLossTrainer(Trainer):
             if load_balance_terms:
                 load_balance_loss = torch.stack(load_balance_terms).mean()
                 loss = loss + effective_load_balance_weight * load_balance_loss
-            if self.moe_aux_loss_cap > 0.0 and (entropy_loss is not None or load_balance_loss is not None):
-                max_allowed = outputs["loss"].detach().abs() * self.moe_aux_loss_cap
-                total_aux = (loss - outputs["loss"]).abs()
+            if mask_l1_terms:
+                mask_l1_loss = torch.stack(mask_l1_terms).mean()
+                loss = loss + effective_mask_l1_weight * mask_l1_loss
+            if self.moe_aux_loss_cap > 0.0 and (entropy_loss is not None or load_balance_loss is not None or mask_l1_loss is not None):
+                max_allowed = base_loss.detach().abs() * self.moe_aux_loss_cap
+                total_aux = (loss - base_loss).abs()
                 if total_aux > max_allowed:
                     aux_clip_scale = (max_allowed / total_aux).detach()
-                    loss = outputs["loss"] + (loss - outputs["loss"]) * aux_clip_scale
+                    loss = base_loss + (loss - base_loss) * aux_clip_scale
 
         if self.state.global_step % max(self.args.logging_steps, 1) == 0:
-            log_payload = {"base_loss": float(outputs["loss"].detach().float())}
+            log_payload = {"base_loss": float(base_loss.detach().float())}
             if entropy_loss is not None:
                 log_payload["moe_entropy_loss"] = float(entropy_loss.detach().float())
             if load_balance_loss is not None:
                 log_payload["moe_load_balance_loss"] = float(load_balance_loss.detach().float())
-            if self.moe_entropy_loss_weight != 0.0 or self.moe_load_balance_loss_weight != 0.0:
+            if mask_l1_loss is not None:
+                log_payload["moe_mask_l1_loss"] = float(mask_l1_loss.detach().float())
+            if self.moe_entropy_loss_weight != 0.0 or self.moe_load_balance_loss_weight != 0.0 or self.moe_mask_l1_loss_weight != 0.0:
                 log_payload["moe_aux_scale"] = float(aux_scale)
                 log_payload["moe_entropy_loss_weight_effective"] = float(effective_entropy_weight)
                 log_payload["moe_load_balance_loss_weight_effective"] = float(effective_load_balance_weight)
+                log_payload["moe_mask_l1_loss_weight_effective"] = float(effective_mask_l1_weight)
+            log_payload["moe_router_temperature"] = float(current_temperature)
+            if self._moe_layers:
+                log_payload["moe_runtime_top_k"] = int(self._moe_layers[0].runtime_top_k)
             self.log(log_payload)
 
         return (loss, outputs) if return_outputs else loss
