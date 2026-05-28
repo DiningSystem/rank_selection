@@ -93,18 +93,18 @@ bash scripts/train_cr.sh
 
 This script will fine-tune a model on the Commonsense170K dataset. You can modify the `model` parameter to explore various models. The script will save the fine-tuned adapters.
 
-For MoE-LoRA CR training, a strong default starting point is:
+For MoE-LoRA CR training, the accuracy-oriented preset is:
 
 ```bash
 bash scripts/train_cr_moe_lora.sh
 ```
 
-This preset uses a stability-oriented setup (`r_max=32`, `top_k=2`, lower router LR, clipped gradients, and longer warmup) with router defaults that work well on LLaMA-family models:
+This preset is tuned for the common failure mode where BoolQ lags the other commonsense datasets: it keeps longer examples with `--max_seq_length=512`, uses `--moe_top_k=4` for more per-token rank capacity, shortens warmup to avoid underfitting, and switches to cosine decay for a smoother late-training finish. The router defaults remain LLaMA-friendly:
 
 - `--moe_router_norm_type=rmsnorm`
 - `--moe_router_activation=silu`
 
-If your run is still volatile, try `--moe_top_k=1` first (more stable routing, sometimes slightly lower peak accuracy).
+If the run is unstable or your GPU runs out of memory, try these in order: reduce `--max_seq_length` back to `256`, reduce `--moe_top_k` to `2`, or reduce `--epochs` to `2`. If BoolQ is the only dataset still low, keep `--max_seq_length=512` and lower `--lr` to `6e-4` before reducing context length.
 
 Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
