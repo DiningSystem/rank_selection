@@ -363,7 +363,7 @@ def load_and_preprocess_cr(tokenizer, args):
     def generate_and_tokenize_prompt_wrapper(data_point):
         return generate_and_tokenize_prompt_cr(data_point, tokenizer, args)
 
-    train_dataset = data["train"].shuffle().map(
+    train_dataset = data["train"].shuffle(seed=args.seed).map(
         generate_and_tokenize_prompt_wrapper,
         num_proc=8,
         remove_columns=data["train"].column_names  # Remove original columns
