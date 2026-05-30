@@ -99,12 +99,12 @@ For MoE-LoRA CR training, the accuracy-oriented preset is:
 bash scripts/train_cr_moe_lora.sh
 ```
 
-This preset is tuned for the common failure mode where BoolQ and ARC-Challenge lag the other commonsense datasets while keeping training capped at `--epochs=2`, preserving the original Commonsense170K data distribution, and retaining the original adapter budget with `--moe_r_max=32` and `--lora_alpha=32`. It improves through the other parameters: `--max_seq_length=512` preserves longer BoolQ passages, `--moe_top_k=4` plus a `512`-hidden router uses the fixed rank budget more selectively, and the cosine schedule, shorter warmup, lower dropout, and cooler final router temperature make the two-epoch run sharper. The router defaults remain LLaMA-friendly:
+This preset is tuned for the common failure mode where BoolQ lags after the other commonsense datasets are close, while keeping training capped at `--epochs=2`, preserving the original Commonsense170K data distribution, and retaining the original adapter budget with `--moe_r_max=32` and `--lora_alpha=32`. It improves through the other parameters: `--max_seq_length=512` preserves full prompts, `--moe_top_k=4` plus a `512`-hidden router uses the fixed rank budget selectively, and the calmer LR/router schedule (`--lr=6e-4`, `--moe_router_lr=8e-5`, longer warmup, and less sharp final router temperature) is intended to preserve pretrained true/false calibration for BoolQ. The router defaults remain LLaMA-friendly:
 
 - `--moe_router_norm_type=rmsnorm`
 - `--moe_router_activation=silu`
 
-If the run is unstable or your GPU runs out of memory, try these in order: reduce `--moe_router_hidden_dim` to `384`, reduce `--moe_top_k` to `3`, or reduce `--max_seq_length` back to `256`. If BoolQ is still low, keep `--max_seq_length=512` and try `--lr=6e-4`; if ARC-Challenge is still low, keep `--moe_r_max=32`/`--lora_alpha=32` and try `--moe_top_k=5` with `--moe_router_lr=1e-4`.
+If the run is unstable or your GPU runs out of memory, try these in order: reduce `--moe_router_hidden_dim` to `384`, reduce `--moe_top_k` to `3`, or reduce `--max_seq_length` back to `256`. If BoolQ is still low, keep `--max_seq_length=512` and try an even calmer update (`--lr=5e-4`, `--moe_router_lr=6e-5`); if ARC-Challenge regresses, keep `--moe_r_max=32`/`--lora_alpha=32` and restore `--lr=8e-4`.
 
 Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
