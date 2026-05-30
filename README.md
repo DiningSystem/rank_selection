@@ -93,18 +93,18 @@ bash scripts/train_cr.sh
 
 This script will fine-tune a model on the Commonsense170K dataset. You can modify the `model` parameter to explore various models. The script will save the fine-tuned adapters.
 
-For MoE-LoRA CR training, a strong default starting point is:
+For MoE-LoRA CR training, the accuracy-oriented preset is:
 
 ```bash
 bash scripts/train_cr_moe_lora.sh
 ```
 
-This preset uses a stability-oriented setup (`r_max=32`, `top_k=2`, lower router LR, clipped gradients, and longer warmup) with router defaults that work well on LLaMA-family models:
+This preset is tuned for the common failure mode where BoolQ lags after the other commonsense datasets are close, while keeping training capped at `--epochs=2`, preserving the original Commonsense170K data distribution, and retaining the original adapter budget with `--moe_r_max=32` and `--lora_alpha=32`. It improves through the other parameters: `--max_seq_length=512` preserves full prompts, `--moe_top_k=4` plus a `512`-hidden router uses the fixed rank budget selectively, and the calmer LR/router schedule (`--lr=6e-4`, `--moe_router_lr=8e-5`, longer warmup, and less sharp final router temperature) is intended to preserve pretrained true/false calibration for BoolQ. The router defaults remain LLaMA-friendly:
 
 - `--moe_router_norm_type=rmsnorm`
 - `--moe_router_activation=silu`
 
-If your run is still volatile, try `--moe_top_k=1` first (more stable routing, sometimes slightly lower peak accuracy).
+If the run is unstable or your GPU runs out of memory, try these in order: reduce `--moe_router_hidden_dim` to `384`, reduce `--moe_top_k` to `3`, or reduce `--max_seq_length` back to `256`. If BoolQ is still low, keep `--max_seq_length=512` and try an even calmer update (`--lr=5e-4`, `--moe_router_lr=6e-5`); if ARC-Challenge regresses, keep `--moe_r_max=32`/`--lora_alpha=32` and restore `--lr=8e-4`.
 
 Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
