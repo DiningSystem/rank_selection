@@ -330,18 +330,13 @@ class MoEAuxLossTrainer(Trainer):
         self.moe_aux_stop_ratio = float(moe_aux_stop_ratio)
         self._moe_layers = [m for m in self.model.modules() if isinstance(m, RankMoELoRALayer)]
 
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        outputs = model(**inputs)
-        if isinstance(outputs, dict):
-            base_loss = outputs["loss"]
-        else:
-            base_loss = outputs.loss
-        loss = base_loss
-
+    def _set_moe_schedule(self):
         max_steps = max(int(getattr(self.state, "max_steps", 0) or 0), 1)
         progress = float(self.state.global_step) / float(max_steps)
 
-        # Router schedule: smooth routing early, sharpen later.
+        # Router schedule: smooth routing early, sharpen later.  This must run
+        # before the forward pass so the current batch actually uses the
+        # scheduled temperature and dense/top-k transition.
         temperature_progress = min(max(progress, 0.0), 1.0)
         current_temperature = self.moe_router_temperature_start + (
             self.moe_router_temperature_end - self.moe_router_temperature_start
@@ -352,6 +347,18 @@ class MoEAuxLossTrainer(Trainer):
                 module.set_runtime_top_k(module.r_max)
             else:
                 module.set_runtime_top_k(module.top_k)
+
+        return progress, current_temperature
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        progress, current_temperature = self._set_moe_schedule()
+
+        outputs = model(**inputs)
+        if isinstance(outputs, dict):
+            base_loss = outputs["loss"]
+        else:
+            base_loss = outputs.loss
+        loss = base_loss
 
         aux_scale = 1.0
         if self.moe_aux_stop_ratio > 0.0 and progress >= self.moe_aux_stop_ratio:
