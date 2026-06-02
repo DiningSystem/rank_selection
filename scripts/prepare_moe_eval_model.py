@@ -11,7 +11,7 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 if REPO_ROOT not in sys.path:
     sys.path.append(REPO_ROOT)
 
-from moe_lora import MoELoRAConfig, get_moe_lora_model, load_moe_checkpoint_state_dict, load_moe_checkpoint_flexible
+from moe_lora import MoELoRAConfig, RankMoELoRALayer, get_moe_lora_model, load_moe_checkpoint_state_dict, load_moe_checkpoint_flexible
 
 
 TARGET_MODULES = ["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"]
@@ -50,19 +50,49 @@ def _infer_router_hidden_dim(checkpoint_dir: str, fallback_hidden: int) -> int:
     return int(fallback_hidden)
 
 
-def _resolve_moe_top_k(checkpoint_dir: str, fallback_top_k: int) -> int:
-    candidate_paths = [
+def _moe_config_paths(checkpoint_dir: str):
+    return [
         os.path.join(checkpoint_dir, "config.json"),
         os.path.join(os.path.dirname(checkpoint_dir), "config.json"),
     ]
-    for config_path in candidate_paths:
-        if not os.path.exists(config_path):
-            continue
-        with open(config_path, "r") as f:
-            cfg = json.load(f)
-        if "moe_top_k" in cfg:
-            return int(cfg["moe_top_k"])
-    return int(fallback_top_k)
+
+
+def _read_json_if_exists(path: str):
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _read_first_config_value(checkpoint_dir: str, key: str, default):
+    for config_path in _moe_config_paths(checkpoint_dir):
+        cfg = _read_json_if_exists(config_path)
+        if key in cfg:
+            return cfg[key]
+    return default
+
+
+def _resolve_moe_hparams(checkpoint_dir: str, args):
+    return {
+        "r_max": _infer_r_max(checkpoint_dir, args.moe_r_max),
+        "top_k": int(_read_first_config_value(checkpoint_dir, "moe_top_k", args.moe_top_k)),
+        "router_hidden_dim": _infer_router_hidden_dim(checkpoint_dir, args.moe_router_hidden_dim),
+        "router_norm_type": str(_read_first_config_value(checkpoint_dir, "moe_router_norm_type", args.moe_router_norm_type)),
+        "router_activation": str(_read_first_config_value(checkpoint_dir, "moe_router_activation", args.moe_router_activation)),
+        "mask_init_strategy": str(_read_first_config_value(checkpoint_dir, "moe_mask_init_strategy", args.moe_mask_init_strategy)),
+        "mask_init_value": float(_read_first_config_value(checkpoint_dir, "moe_mask_init_value", args.moe_mask_init_value)),
+        "mask_init_std": float(_read_first_config_value(checkpoint_dir, "moe_mask_init_std", args.moe_mask_init_std)),
+        "router_temperature": float(_read_first_config_value(checkpoint_dir, "moe_router_temperature_end", args.moe_router_temperature)),
+    }
+
+
+def _set_moe_router_temperature(model, temperature: float) -> int:
+    updated = 0
+    for module in model.modules():
+        if isinstance(module, RankMoELoRALayer):
+            module.set_routing_temperature(temperature)
+            updated += 1
+    return updated
 
 
 def main():
@@ -72,21 +102,34 @@ def main():
     parser.add_argument("--base_model", default=None, help="Optional HF base model name/path override")
     parser.add_argument("--moe_r_max", type=int, default=32, help="Fallback r_max if not inferable from checkpoint")
     parser.add_argument("--moe_top_k", type=int, default=1, help="Top-k for routed experts")
-    parser.add_argument("--moe_router_hidden_dim", type=int, default=128, help="Router hidden dim (0 => linear router)")
+    parser.add_argument("--moe_router_hidden_dim", type=int, default=128, help="Router hidden dim")
+    parser.add_argument("--moe_router_norm_type", default="layernorm", choices=["layernorm", "rmsnorm", "none"], help="Fallback router norm type")
+    parser.add_argument("--moe_router_activation", default="gelu", choices=["gelu", "silu", "relu"], help="Fallback router activation")
+    parser.add_argument("--moe_mask_init_strategy", default="sigmoid", choices=["sigmoid", "xavier_norm"], help="Fallback mask init strategy")
+    parser.add_argument("--moe_mask_init_value", type=float, default=0.9, help="Fallback sigmoid mask init value")
+    parser.add_argument("--moe_mask_init_std", type=float, default=0.0, help="Fallback mask init noise std-dev")
+    parser.add_argument("--moe_router_temperature", type=float, default=1.0, help="Fallback eval router temperature")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     base_model_name = _resolve_base_model(args.checkpoint_dir, args.base_model)
-    inferred_r_max = _infer_r_max(args.checkpoint_dir, args.moe_r_max)
-    resolved_top_k = _resolve_moe_top_k(args.checkpoint_dir, args.moe_top_k)
-    resolved_router_hidden = _infer_router_hidden_dim(args.checkpoint_dir, args.moe_router_hidden_dim)
-    router_hidden_dim = resolved_router_hidden if resolved_router_hidden > 0 else None
+    moe_hparams = _resolve_moe_hparams(args.checkpoint_dir, args)
+    router_hidden_dim = moe_hparams["router_hidden_dim"] if moe_hparams["router_hidden_dim"] > 0 else None
 
     print(f"[prepare_moe_eval_model] Base model: {base_model_name}")
-    print(f"[prepare_moe_eval_model] Inferred r_max: {inferred_r_max}")
-    print(f"[prepare_moe_eval_model] Resolved top_k: {resolved_top_k}")
-    print(f"[prepare_moe_eval_model] Resolved router_hidden_dim: {router_hidden_dim}")
+    print(
+        "[prepare_moe_eval_model] Resolved MoE hparams: "
+        f"r_max={moe_hparams['r_max']}, "
+        f"top_k={moe_hparams['top_k']}, "
+        f"router_hidden_dim={router_hidden_dim}, "
+        f"router_norm_type={moe_hparams['router_norm_type']}, "
+        f"router_activation={moe_hparams['router_activation']}, "
+        f"mask_init_strategy={moe_hparams['mask_init_strategy']}, "
+        f"mask_init_value={moe_hparams['mask_init_value']}, "
+        f"mask_init_std={moe_hparams['mask_init_std']}, "
+        f"router_temperature={moe_hparams['router_temperature']}"
+    )
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
@@ -95,15 +138,34 @@ def main():
     )
 
     moe_config = MoELoRAConfig(
-        experts_config=[{"rank": inferred_r_max}],
-        r_max=inferred_r_max,
-        top_k=resolved_top_k,
+        experts_config=[{"rank": moe_hparams["r_max"]}],
+        r_max=moe_hparams["r_max"],
+        top_k=moe_hparams["top_k"],
         router_hidden_dim=router_hidden_dim,
+        router_norm_type=moe_hparams["router_norm_type"],
+        router_activation=moe_hparams["router_activation"],
+        mask_init_strategy=moe_hparams["mask_init_strategy"],
+        mask_init_value=moe_hparams["mask_init_value"],
+        mask_init_std=moe_hparams["mask_init_std"],
         target_modules=TARGET_MODULES,
         freeze_base=True,
     )
     model = get_moe_lora_model(base_model, moe_config)
     load_moe_checkpoint_flexible(model, args.checkpoint_dir, strict=False)
+    updated_temperatures = _set_moe_router_temperature(model, moe_hparams["router_temperature"])
+    print(f"[prepare_moe_eval_model] Applied router_temperature to {updated_temperatures} MoE layers")
+    for key, value in {
+        "moe_r_max": moe_hparams["r_max"],
+        "moe_top_k": moe_hparams["top_k"],
+        "moe_router_hidden_dim": moe_hparams["router_hidden_dim"],
+        "moe_router_norm_type": moe_hparams["router_norm_type"],
+        "moe_router_activation": moe_hparams["router_activation"],
+        "moe_mask_init_strategy": moe_hparams["mask_init_strategy"],
+        "moe_mask_init_value": moe_hparams["mask_init_value"],
+        "moe_mask_init_std": moe_hparams["mask_init_std"],
+        "moe_router_temperature_end": moe_hparams["router_temperature"],
+    }.items():
+        setattr(model.config, key, value)
     model.save_pretrained(args.output_dir)
     print(f"[prepare_moe_eval_model] Saved eval-ready model to: {args.output_dir}")
 
