@@ -88,6 +88,38 @@ def generate_prompt(instruction, input=None):
 """
 
 
+def answer_choices_for_dataset(dataset):
+    if dataset == 'boolq':
+        return ['true', 'false']
+    if dataset == 'piqa':
+        return ['solution1', 'solution2']
+    if dataset in ['ARC-Challenge', 'ARC-Easy', 'openbookqa']:
+        return ['answer1', 'answer2', 'answer3', 'answer4', 'answer5']
+    if dataset == 'social_i_qa':
+        return ['answer1', 'answer2', 'answer3']
+    if dataset == 'hellaswag':
+        return ['ending1', 'ending2', 'ending3', 'ending4']
+    if dataset == 'winogrande':
+        return ['option1', 'option2']
+    raise ValueError(f"Unsupported dataset: {dataset}")
+
+
+def predict_with_choice_scores(backend, prompts, dataset_name, choice_template, normalize_choices):
+    if "{choice}" not in choice_template:
+        raise ValueError("choice_template must include '{choice}'")
+    choices = answer_choices_for_dataset(dataset_name)
+    if not hasattr(backend, 'score_choices'):
+        raise ValueError("eval_mode='loglikelihood' requires a backend with score_choices support; use --backend hf_moe.")
+    score_dicts = backend.score_choices(
+        prompts,
+        choices,
+        choice_template=choice_template,
+        normalize=normalize_choices,
+    )
+    preds = [max(scores, key=scores.get) for scores in score_dicts]
+    return preds, score_dicts
+
+
 def commonsense_test(
     model,
     dataset_name,
@@ -102,6 +134,9 @@ def commonsense_test(
     top_p=1.0,
     top_k=-1,
     max_tokens=32,
+    eval_mode="generate",
+    choice_template="the correct answer is {choice}",
+    normalize_choices=True,
     save_predictions=False,
     prediction_output_dir=None,
 ):
@@ -140,21 +175,46 @@ def commonsense_test(
     wrong_outputs = []
     prediction_records = []
 
-    # Generate responses
-    print("\nGenerating responses...")
-    for idx, prompts in enumerate(
-        tqdm(batch_instructions, 
-            total=len(batch_instructions), 
-            desc="Generating responses",
-            ncols=100)
-    ):
-        if not isinstance(prompts, list):
-            prompts = [prompts]
-            
-        formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
-        completions = backend.generate(formatted_prompts, sampling_params)
-        for generated_text in completions:
-            res_completions.append(generated_text)
+    score_records = []
+    if eval_mode == "generate":
+        # Generate responses
+        print("\nGenerating responses...")
+        for idx, prompts in enumerate(
+            tqdm(batch_instructions,
+                total=len(batch_instructions),
+                desc="Generating responses",
+                ncols=100)
+        ):
+            if not isinstance(prompts, list):
+                prompts = [prompts]
+
+            formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
+            completions = backend.generate(formatted_prompts, sampling_params)
+            for generated_text in completions:
+                res_completions.append(generated_text)
+    elif eval_mode == "loglikelihood":
+        print("\nScoring answer choices...")
+        for idx, prompts in enumerate(
+            tqdm(batch_instructions,
+                total=len(batch_instructions),
+                desc="Scoring choices",
+                ncols=100)
+        ):
+            if not isinstance(prompts, list):
+                prompts = [prompts]
+
+            formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
+            preds, batch_scores = predict_with_choice_scores(
+                backend,
+                formatted_prompts,
+                dataset_name,
+                choice_template=choice_template,
+                normalize_choices=normalize_choices,
+            )
+            res_completions.extend(preds)
+            score_records.extend(batch_scores)
+    else:
+        raise ValueError(f"Unsupported eval_mode: {eval_mode}")
 
     # Evaluate responses
     print("\nEvaluating responses...")
@@ -166,7 +226,7 @@ def commonsense_test(
             ncols=100
         )
     ):
-        pred = extract_answer(dataset_name, completion)
+        pred = completion if eval_mode == "loglikelihood" else extract_answer(dataset_name, completion)
         is_correct = (pred == answer)
         result.append(is_correct)
         record = {
@@ -177,6 +237,8 @@ def commonsense_test(
             'answer': answer,
             'correct': is_correct,
         }
+        if eval_mode == "loglikelihood":
+            record['choice_scores'] = score_records[idx]
         prediction_records.append(record)
 
         if not is_correct:
@@ -193,6 +255,8 @@ def commonsense_test(
         f"eval/{dataset_name}_acc": acc,
         f"eval/{dataset_name}_invalid_outputs": len(invalid_outputs),
     })
+
+    print(f'Eval mode: {eval_mode}')
 
     print(f'Invalid outputs count: {len(invalid_outputs)}')
     print(f'Wrong outputs count: {len(wrong_outputs)}')
@@ -251,6 +315,12 @@ def parse_args():
                       help="Top-k sampling value (-1 disables top-k filtering)")
     parser.add_argument("--max_tokens", type=int, default=32,
                       help="Maximum generated tokens per sample")
+    parser.add_argument("--eval_mode", type=str, default="generate", choices=["generate", "loglikelihood"],
+                      help="Use free-form generation or constrained answer-choice log-likelihood scoring")
+    parser.add_argument("--choice_template", type=str, default="the correct answer is {choice}",
+                      help="Candidate text template for loglikelihood mode; must include {choice}")
+    parser.add_argument("--no_normalize_choices", action="store_true",
+                      help="Use summed rather than per-token average choice log-likelihood")
     parser.add_argument("--run_dir", type=str,
                       help="Directory containing the wandb run ID")
     parser.add_argument("--save_predictions", action="store_true",
@@ -300,6 +370,9 @@ if __name__ == "__main__":
         top_p=args.top_p,
         top_k=args.top_k,
         max_tokens=args.max_tokens,
+        eval_mode=args.eval_mode,
+        choice_template=args.choice_template,
+        normalize_choices=not args.no_normalize_choices,
         save_predictions=args.save_predictions,
         prediction_output_dir=args.prediction_output_dir,
     )

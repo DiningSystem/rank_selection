@@ -151,6 +151,9 @@ class VLLMBackend:
             tensor_parallel_size=tensor_parallel_size,
         )
 
+    def score_choices(self, prompts, choices, choice_template="{choice}", normalize=True):
+        raise NotImplementedError("Choice log-likelihood scoring is currently implemented for backend='hf_moe' only.")
+
     def generate(self, prompts, sampling_params):
         try:
             from vllm import SamplingParams as VLLMSamplingParams
@@ -285,6 +288,49 @@ class HFMoEBackend:
             decoded = processed
         del inputs, generated, completions
         return decoded
+
+
+    def score_choices(self, prompts, choices, choice_template="{choice}", normalize=True):
+        scored_inputs = []
+        for prompt_idx, prompt in enumerate(prompts):
+            prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
+            for choice in choices:
+                choice_text = choice_template.format(choice=choice)
+                choice_ids = self.tokenizer.encode(choice_text, add_special_tokens=False)
+                if self.tokenizer.eos_token_id is not None:
+                    choice_ids = choice_ids + [self.tokenizer.eos_token_id]
+                max_prompt_len = max(self.max_context_len - len(choice_ids), 1)
+                truncated_prompt_ids = prompt_ids[-max_prompt_len:]
+                input_ids = truncated_prompt_ids + choice_ids
+                scored_inputs.append((prompt_idx, choice, input_ids, len(truncated_prompt_ids), len(choice_ids)))
+
+        max_len = max(len(input_ids) for _, _, input_ids, _, _ in scored_inputs)
+        pad_id = self.tokenizer.pad_token_id
+        input_tensor = torch.full((len(scored_inputs), max_len), pad_id, dtype=torch.long, device=self.device)
+        attention_mask = torch.zeros_like(input_tensor)
+        for row_idx, (_, _, input_ids, _, _) in enumerate(scored_inputs):
+            seq = torch.tensor(input_ids, dtype=torch.long, device=self.device)
+            input_tensor[row_idx, : len(input_ids)] = seq
+            attention_mask[row_idx, : len(input_ids)] = 1
+
+        with torch.inference_mode():
+            outputs = self.model(input_ids=input_tensor, attention_mask=attention_mask, use_cache=False)
+            log_probs = torch.log_softmax(outputs.logits.float(), dim=-1)
+
+        results = [dict() for _ in prompts]
+        for row_idx, (prompt_idx, choice, input_ids, prompt_len, choice_len) in enumerate(scored_inputs):
+            token_scores = []
+            # Token at position p is predicted by logits at p - 1.
+            for pos in range(prompt_len, prompt_len + choice_len):
+                token_id = input_ids[pos]
+                token_scores.append(log_probs[row_idx, pos - 1, token_id])
+            score = torch.stack(token_scores).sum()
+            if normalize and token_scores:
+                score = score / len(token_scores)
+            results[prompt_idx][choice] = float(score.detach().cpu())
+
+        del input_tensor, attention_mask, outputs, log_probs
+        return results
 
     def generate(self, prompts, sampling_params):
         try:
