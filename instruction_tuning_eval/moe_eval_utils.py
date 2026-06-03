@@ -11,7 +11,7 @@ REPO_ROOT = os.path.dirname(CURRENT_DIR)
 if REPO_ROOT not in sys.path:
     sys.path.append(REPO_ROOT)
 
-from moe_lora import MoELoRAConfig, get_moe_lora_model, load_moe_checkpoint_flexible, load_moe_checkpoint_state_dict
+from moe_lora import MoELoRAConfig, RankMoELoRALayer, get_moe_lora_model, load_moe_checkpoint_flexible, load_moe_checkpoint_state_dict
 
 
 def model_path_candidates(model_path: str):
@@ -63,6 +63,24 @@ def _read_json_if_exists(path: str):
         return json.load(f)
 
 
+def _moe_config_paths(model_path: str):
+    # Training arguments are saved at the run root, while final_model/config.json
+    # is the Hugging Face model config.  Check both so eval-ready copies under
+    # run_root/final_model_eval_ready can still recover the training settings.
+    return [
+        os.path.join(model_path, "config.json"),
+        os.path.join(os.path.dirname(model_path), "config.json"),
+    ]
+
+
+def _read_first_config_value(model_path: str, key: str, default):
+    for config_path in _moe_config_paths(model_path):
+        cfg = _read_json_if_exists(config_path)
+        if key in cfg:
+            return cfg[key]
+    return default
+
+
 def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top_k: int = 1, fallback_router_hidden: int = 128):
     state_dict = load_moe_checkpoint_state_dict(model_path)
     r_max = int(fallback_r_max)
@@ -72,7 +90,7 @@ def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top
             r_max = int(v.shape[0])
             break
     for k, v in state_dict.items():
-        # Router block is: LayerNorm -> Linear(d_model, hidden) -> GELU -> Linear(hidden, r_max).
+        # Router block is: Norm -> Linear(d_model, hidden) -> Activation -> Linear(hidden, r_max).
         if k.endswith("router.net.1.weight") and getattr(v, "ndim", 0) >= 2:
             router_hidden_dim = int(v.shape[0])
             break
@@ -80,19 +98,43 @@ def _resolve_moe_hparams(model_path: str, fallback_r_max: int = 32, fallback_top
             router_hidden_dim = int(v.shape[1])
             break
 
-    top_k = int(fallback_top_k)
-    config_paths = [
-        os.path.join(model_path, "config.json"),
-        os.path.join(os.path.dirname(model_path), "config.json"),
-    ]
-    for config_path in config_paths:
-        cfg = _read_json_if_exists(config_path)
-        if "moe_top_k" in cfg:
-            top_k = int(cfg["moe_top_k"])
-            break
+    top_k = int(_read_first_config_value(model_path, "moe_top_k", fallback_top_k))
+    router_norm_type = str(_read_first_config_value(model_path, "moe_router_norm_type", "layernorm"))
+    router_activation = str(_read_first_config_value(model_path, "moe_router_activation", "gelu"))
+    mask_init_strategy = str(_read_first_config_value(model_path, "moe_mask_init_strategy", "sigmoid"))
+    mask_init_value = float(_read_first_config_value(model_path, "moe_mask_init_value", 0.9))
+    mask_init_std = float(_read_first_config_value(model_path, "moe_mask_init_std", 0.0))
+    router_temperature = float(_read_first_config_value(model_path, "moe_router_temperature_end", 1.0))
+
     top_k = int(os.getenv("HF_MOE_TOP_K", str(top_k)))
     router_hidden_dim = int(os.getenv("HF_MOE_ROUTER_HIDDEN_DIM", str(router_hidden_dim)))
-    return r_max, top_k, router_hidden_dim
+    router_norm_type = os.getenv("HF_MOE_ROUTER_NORM_TYPE", router_norm_type)
+    router_activation = os.getenv("HF_MOE_ROUTER_ACTIVATION", router_activation)
+    mask_init_strategy = os.getenv("HF_MOE_MASK_INIT_STRATEGY", mask_init_strategy)
+    mask_init_value = float(os.getenv("HF_MOE_MASK_INIT_VALUE", str(mask_init_value)))
+    mask_init_std = float(os.getenv("HF_MOE_MASK_INIT_STD", str(mask_init_std)))
+    router_temperature = float(os.getenv("HF_MOE_ROUTER_TEMPERATURE", str(router_temperature)))
+
+    return {
+        "r_max": r_max,
+        "top_k": top_k,
+        "router_hidden_dim": router_hidden_dim,
+        "router_norm_type": router_norm_type,
+        "router_activation": router_activation,
+        "mask_init_strategy": mask_init_strategy,
+        "mask_init_value": mask_init_value,
+        "mask_init_std": mask_init_std,
+        "router_temperature": router_temperature,
+    }
+
+
+def _set_moe_router_temperature(model, temperature: float) -> int:
+    updated = 0
+    for module in model.modules():
+        if isinstance(module, RankMoELoRALayer):
+            module.set_routing_temperature(temperature)
+            updated += 1
+    return updated
 
 
 class VLLMBackend:
@@ -108,6 +150,9 @@ class VLLMBackend:
             tokenizer=tokenizer_path if tokenizer_path else model_path,
             tensor_parallel_size=tensor_parallel_size,
         )
+
+    def score_choices(self, prompts, choices, choice_template="{choice}", normalize=True):
+        raise NotImplementedError("Choice log-likelihood scoring is currently implemented for backend='hf_moe' only.")
 
     def generate(self, prompts, sampling_params):
         try:
@@ -132,8 +177,19 @@ class HFMoEBackend:
     def __init__(self, model_path: str, tokenizer_path: str | None):
         print(f"[moe_eval_utils] Initializing HFMoEBackend with model_path={model_path}")
         base_model_name = _resolve_base_model_name(model_path)
-        r_max, moe_top_k, router_hidden_dim = _resolve_moe_hparams(model_path)
-        print(f"[moe_eval_utils] Resolved MoE hparams: r_max={r_max}, top_k={moe_top_k}, router_hidden_dim={router_hidden_dim}")
+        moe_hparams = _resolve_moe_hparams(model_path)
+        print(
+            "[moe_eval_utils] Resolved MoE hparams: "
+            f"r_max={moe_hparams['r_max']}, "
+            f"top_k={moe_hparams['top_k']}, "
+            f"router_hidden_dim={moe_hparams['router_hidden_dim']}, "
+            f"router_norm_type={moe_hparams['router_norm_type']}, "
+            f"router_activation={moe_hparams['router_activation']}, "
+            f"mask_init_strategy={moe_hparams['mask_init_strategy']}, "
+            f"mask_init_value={moe_hparams['mask_init_value']}, "
+            f"mask_init_std={moe_hparams['mask_init_std']}, "
+            f"router_temperature={moe_hparams['router_temperature']}"
+        )
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         if self.device.startswith("cuda"):
             torch.backends.cuda.matmul.allow_tf32 = True
@@ -142,16 +198,24 @@ class HFMoEBackend:
             torch_dtype=torch.bfloat16,
             device_map={"": self.device},
         )
+        router_hidden_dim = moe_hparams["router_hidden_dim"] if moe_hparams["router_hidden_dim"] > 0 else None
         moe_config = MoELoRAConfig(
-            experts_config=[{"rank": r_max}],
-            r_max=r_max,
-            top_k=moe_top_k,
+            experts_config=[{"rank": moe_hparams["r_max"]}],
+            r_max=moe_hparams["r_max"],
+            top_k=moe_hparams["top_k"],
             router_hidden_dim=router_hidden_dim,
+            router_norm_type=moe_hparams["router_norm_type"],
+            router_activation=moe_hparams["router_activation"],
+            mask_init_strategy=moe_hparams["mask_init_strategy"],
+            mask_init_value=moe_hparams["mask_init_value"],
+            mask_init_std=moe_hparams["mask_init_std"],
             target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
             freeze_base=True,
         )
         model = get_moe_lora_model(base_model, moe_config)
         load_moe_checkpoint_flexible(model, model_path, strict=False)
+        updated_temperatures = _set_moe_router_temperature(model, moe_hparams["router_temperature"])
+        print(f"[moe_eval_utils] Applied router_temperature to {updated_temperatures} MoE layers")
         self.model = model.eval().to(self.device)
         # KV cache is critical for decode-time throughput in autoregressive generation.
         # Keep it enabled by default and allow opting out via env var for low-memory GPUs.
@@ -224,6 +288,49 @@ class HFMoEBackend:
             decoded = processed
         del inputs, generated, completions
         return decoded
+
+
+    def score_choices(self, prompts, choices, choice_template="{choice}", normalize=True):
+        scored_inputs = []
+        for prompt_idx, prompt in enumerate(prompts):
+            prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
+            for choice in choices:
+                choice_text = choice_template.format(choice=choice)
+                choice_ids = self.tokenizer.encode(choice_text, add_special_tokens=False)
+                if self.tokenizer.eos_token_id is not None:
+                    choice_ids = choice_ids + [self.tokenizer.eos_token_id]
+                max_prompt_len = max(self.max_context_len - len(choice_ids), 1)
+                truncated_prompt_ids = prompt_ids[-max_prompt_len:]
+                input_ids = truncated_prompt_ids + choice_ids
+                scored_inputs.append((prompt_idx, choice, input_ids, len(truncated_prompt_ids), len(choice_ids)))
+
+        max_len = max(len(input_ids) for _, _, input_ids, _, _ in scored_inputs)
+        pad_id = self.tokenizer.pad_token_id
+        input_tensor = torch.full((len(scored_inputs), max_len), pad_id, dtype=torch.long, device=self.device)
+        attention_mask = torch.zeros_like(input_tensor)
+        for row_idx, (_, _, input_ids, _, _) in enumerate(scored_inputs):
+            seq = torch.tensor(input_ids, dtype=torch.long, device=self.device)
+            input_tensor[row_idx, : len(input_ids)] = seq
+            attention_mask[row_idx, : len(input_ids)] = 1
+
+        with torch.inference_mode():
+            outputs = self.model(input_ids=input_tensor, attention_mask=attention_mask, use_cache=False)
+            log_probs = torch.log_softmax(outputs.logits.float(), dim=-1)
+
+        results = [dict() for _ in prompts]
+        for row_idx, (prompt_idx, choice, input_ids, prompt_len, choice_len) in enumerate(scored_inputs):
+            token_scores = []
+            # Token at position p is predicted by logits at p - 1.
+            for pos in range(prompt_len, prompt_len + choice_len):
+                token_id = input_ids[pos]
+                token_scores.append(log_probs[row_idx, pos - 1, token_id])
+            score = torch.stack(token_scores).sum()
+            if normalize and token_scores:
+                score = score / len(token_scores)
+            results[prompt_idx][choice] = float(score.detach().cpu())
+
+        del input_tensor, attention_mask, outputs, log_probs
+        return results
 
     def generate(self, prompts, sampling_params):
         try:

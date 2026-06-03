@@ -3,6 +3,8 @@
 # Configuration
 MODEL="meta-llama/Llama-3.2-1B"
 GPU_ID=0  # Specify which GPU to use
+EVAL_SAVE_PREDICTIONS=${EVAL_SAVE_PREDICTIONS:-0}
+EVAL_PREDICTION_OUTPUT_DIR=${EVAL_PREDICTION_OUTPUT_DIR:-}
 
 # List of run directories to process; add trained adapter directories here
 RUN_DIRS=("")
@@ -55,6 +57,14 @@ for RUN_DIR in "${RUN_DIRS[@]}"; do
         "winogrande"
     )
 
+    EXTRA_EVAL_ARGS=()
+    if [ "$EVAL_SAVE_PREDICTIONS" = "1" ]; then
+        EXTRA_EVAL_ARGS+=(--save_predictions)
+        if [ -n "$EVAL_PREDICTION_OUTPUT_DIR" ]; then
+            EXTRA_EVAL_ARGS+=(--prediction_output_dir "$EVAL_PREDICTION_OUTPUT_DIR")
+        fi
+    fi
+
     # Loop through datasets and evaluate
     for dataset in "${datasets[@]}"; do
         echo "=== Evaluating on $dataset ==="
@@ -67,7 +77,8 @@ for RUN_DIR in "${RUN_DIRS[@]}"; do
             --data_file "data/commonsense/$dataset/test.json" \
             --batch_size 128 \
             --tensor_parallel_size 1 \
-            --run_dir "$RUN_DIR" 
+            --run_dir "$RUN_DIR" \
+            "${EXTRA_EVAL_ARGS[@]}"
     done
 
     # Clean up merged model directory

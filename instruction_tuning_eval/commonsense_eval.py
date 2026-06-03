@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 import json
 import re
 import sys
@@ -87,6 +88,38 @@ def generate_prompt(instruction, input=None):
 """
 
 
+def answer_choices_for_dataset(dataset):
+    if dataset == 'boolq':
+        return ['true', 'false']
+    if dataset == 'piqa':
+        return ['solution1', 'solution2']
+    if dataset in ['ARC-Challenge', 'ARC-Easy', 'openbookqa']:
+        return ['answer1', 'answer2', 'answer3', 'answer4', 'answer5']
+    if dataset == 'social_i_qa':
+        return ['answer1', 'answer2', 'answer3']
+    if dataset == 'hellaswag':
+        return ['ending1', 'ending2', 'ending3', 'ending4']
+    if dataset == 'winogrande':
+        return ['option1', 'option2']
+    raise ValueError(f"Unsupported dataset: {dataset}")
+
+
+def predict_with_choice_scores(backend, prompts, dataset_name, choice_template, normalize_choices):
+    if "{choice}" not in choice_template:
+        raise ValueError("choice_template must include '{choice}'")
+    choices = answer_choices_for_dataset(dataset_name)
+    if not hasattr(backend, 'score_choices'):
+        raise ValueError("eval_mode='loglikelihood' requires a backend with score_choices support; use --backend hf_moe.")
+    score_dicts = backend.score_choices(
+        prompts,
+        choices,
+        choice_template=choice_template,
+        normalize=normalize_choices,
+    )
+    preds = [max(scores, key=scores.get) for scores in score_dicts]
+    return preds, score_dicts
+
+
 def commonsense_test(
     model,
     dataset_name,
@@ -101,6 +134,11 @@ def commonsense_test(
     top_p=1.0,
     top_k=-1,
     max_tokens=32,
+    eval_mode="generate",
+    choice_template="the correct answer is {choice}",
+    normalize_choices=True,
+    save_predictions=False,
+    prediction_output_dir=None,
 ):
     """Main evaluation function for commonsense tasks."""
     torch.cuda.empty_cache()
@@ -134,22 +172,49 @@ def commonsense_test(
     res_completions = []
     result = []
     invalid_outputs = []
+    wrong_outputs = []
+    prediction_records = []
 
-    # Generate responses
-    print("\nGenerating responses...")
-    for idx, prompts in enumerate(
-        tqdm(batch_instructions, 
-            total=len(batch_instructions), 
-            desc="Generating responses",
-            ncols=100)
-    ):
-        if not isinstance(prompts, list):
-            prompts = [prompts]
-            
-        formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
-        completions = backend.generate(formatted_prompts, sampling_params)
-        for generated_text in completions:
-            res_completions.append(generated_text)
+    score_records = []
+    if eval_mode == "generate":
+        # Generate responses
+        print("\nGenerating responses...")
+        for idx, prompts in enumerate(
+            tqdm(batch_instructions,
+                total=len(batch_instructions),
+                desc="Generating responses",
+                ncols=100)
+        ):
+            if not isinstance(prompts, list):
+                prompts = [prompts]
+
+            formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
+            completions = backend.generate(formatted_prompts, sampling_params)
+            for generated_text in completions:
+                res_completions.append(generated_text)
+    elif eval_mode == "loglikelihood":
+        print("\nScoring answer choices...")
+        for idx, prompts in enumerate(
+            tqdm(batch_instructions,
+                total=len(batch_instructions),
+                desc="Scoring choices",
+                ncols=100)
+        ):
+            if not isinstance(prompts, list):
+                prompts = [prompts]
+
+            formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
+            preds, batch_scores = predict_with_choice_scores(
+                backend,
+                formatted_prompts,
+                dataset_name,
+                choice_template=choice_template,
+                normalize_choices=normalize_choices,
+            )
+            res_completions.extend(preds)
+            score_records.extend(batch_scores)
+    else:
+        raise ValueError(f"Unsupported eval_mode: {eval_mode}")
 
     # Evaluate responses
     print("\nEvaluating responses...")
@@ -161,21 +226,59 @@ def commonsense_test(
             ncols=100
         )
     ):
-        pred = extract_answer(dataset_name, completion)
+        pred = completion if eval_mode == "loglikelihood" else extract_answer(dataset_name, completion)
         is_correct = (pred == answer)
         result.append(is_correct)
-        
-        if not is_correct and not pred:
-            temp = {'instruction': instruction, 'output': completion, 'answer': answer}
-            invalid_outputs.append(temp)
+        record = {
+            'idx': idx,
+            'instruction': instruction,
+            'output': completion,
+            'pred': pred,
+            'answer': answer,
+            'correct': is_correct,
+        }
+        if eval_mode == "loglikelihood":
+            record['choice_scores'] = score_records[idx]
+        prediction_records.append(record)
+
+        if not is_correct:
+            wrong_outputs.append(record)
+            if not pred:
+                invalid_outputs.append(record)
 
     # Calculate and log metrics
     acc = sum(result) / len(result)
+    answer_counts = Counter(answers)
+    pred_counts = Counter(record['pred'] for record in prediction_records)
+    wrong_pred_counts = Counter(record['pred'] for record in wrong_outputs)
     wandb.log({
         f"eval/{dataset_name}_acc": acc,
+        f"eval/{dataset_name}_invalid_outputs": len(invalid_outputs),
     })
 
+    print(f'Eval mode: {eval_mode}')
+
     print(f'Invalid outputs count: {len(invalid_outputs)}')
+    print(f'Wrong outputs count: {len(wrong_outputs)}')
+    print(f'Gold answer distribution: {dict(answer_counts)}')
+    print(f'Prediction distribution: {dict(pred_counts)}')
+    print(f'Wrong prediction distribution: {dict(wrong_pred_counts)}')
+    if save_predictions:
+        output_dir = prediction_output_dir or os.path.join(os.getcwd(), 'eval_predictions')
+        os.makedirs(output_dir, exist_ok=True)
+        safe_dataset_name = dataset_name.replace('/', '_')
+        suffix = f'{start}_{end if end != MAX_INT else "end"}'
+        prediction_path = os.path.join(output_dir, f'{safe_dataset_name}_{suffix}_predictions.jsonl')
+        wrong_path = os.path.join(output_dir, f'{safe_dataset_name}_{suffix}_wrong.jsonl')
+        with open(prediction_path, 'w') as f:
+            for record in prediction_records:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        with open(wrong_path, 'w') as f:
+            for record in wrong_outputs:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        print(f'Saved predictions to: {prediction_path}')
+        print(f'Saved wrong outputs to: {wrong_path}')
+
     print(f'Evaluation range: start={start}, end={end}')
     print(f'Total evaluated: {len(result)}, Accuracy: {acc:.4f}')
     
@@ -212,14 +315,27 @@ def parse_args():
                       help="Top-k sampling value (-1 disables top-k filtering)")
     parser.add_argument("--max_tokens", type=int, default=32,
                       help="Maximum generated tokens per sample")
+    parser.add_argument("--eval_mode", type=str, default="generate", choices=["generate", "loglikelihood"],
+                      help="Use free-form generation or constrained answer-choice log-likelihood scoring")
+    parser.add_argument("--choice_template", type=str, default="the correct answer is {choice}",
+                      help="Candidate text template for loglikelihood mode; must include {choice}")
+    parser.add_argument("--no_normalize_choices", action="store_true",
+                      help="Use summed rather than per-token average choice log-likelihood")
     parser.add_argument("--run_dir", type=str,
                       help="Directory containing the wandb run ID")
+    parser.add_argument("--save_predictions", action="store_true",
+                      help="Save per-example predictions and wrong outputs as JSONL files")
+    parser.add_argument("--prediction_output_dir", type=str, default=None,
+                      help="Directory for saved prediction JSONL files; defaults to run_dir/eval_predictions when run_dir is set")
 
     args = parser.parse_args()
     
     # Set default data file path if not provided
     if args.data_file is None:
         args.data_file = f'data/commonsense/{args.dataset}/test.json'
+
+    if args.save_predictions and args.prediction_output_dir is None and args.run_dir:
+        args.prediction_output_dir = os.path.join(args.run_dir, "eval_predictions")
 
     # Initialize wandb
     if args.run_dir:
@@ -254,4 +370,9 @@ if __name__ == "__main__":
         top_p=args.top_p,
         top_k=args.top_k,
         max_tokens=args.max_tokens,
+        eval_mode=args.eval_mode,
+        choice_template=args.choice_template,
+        normalize_choices=not args.no_normalize_choices,
+        save_predictions=args.save_predictions,
+        prediction_output_dir=args.prediction_output_dir,
     )
