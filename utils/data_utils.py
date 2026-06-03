@@ -352,6 +352,34 @@ def load_and_preprocess_contaminated_it(tokenizer, args):
 
     return combined_dataset
 
+
+def _is_boolq_example(example):
+    instruction = str(example.get("instruction", "")).lower()
+    answer = str(example.get("answer", "")).lower()
+    return answer in {"true", "false"} or "true or false" in instruction or "answer format: true/false" in instruction
+
+
+def _is_boolq_false_example(example):
+    return _is_boolq_example(example) and str(example.get("answer", "")).lower() == "false"
+
+
+def apply_boolq_oversampling(train_split, args):
+    boolq_factor = max(1, int(getattr(args, "boolq_oversample_factor", 1)))
+    false_factor = max(1, int(getattr(args, "boolq_false_oversample_factor", 1)))
+    if boolq_factor <= 1 and false_factor <= 1:
+        return train_split
+
+    pieces = [train_split]
+    if boolq_factor > 1:
+        boolq_split = train_split.filter(_is_boolq_example, num_proc=8, desc="Selecting BoolQ examples for oversampling")
+        pieces.extend([boolq_split] * (boolq_factor - 1))
+        print(f"BoolQ oversampling: added {(boolq_factor - 1) * len(boolq_split)} examples from {len(boolq_split)} BoolQ samples")
+    if false_factor > 1:
+        false_split = train_split.filter(_is_boolq_false_example, num_proc=8, desc="Selecting BoolQ false examples for oversampling")
+        pieces.extend([false_split] * (false_factor - 1))
+        print(f"BoolQ false oversampling: added {(false_factor - 1) * len(false_split)} examples from {len(false_split)} false samples")
+    return concatenate_datasets(pieces)
+
 def load_and_preprocess_cr(tokenizer, args):
     """Load and preprocess the dataset."""
     if args.data_path.endswith(".json"):
@@ -359,14 +387,16 @@ def load_and_preprocess_cr(tokenizer, args):
     else:
         data = load_dataset(args.data_path)
 
+    train_split = apply_boolq_oversampling(data["train"], args)
+
     # Create a wrapper function that includes all necessary arguments
     def generate_and_tokenize_prompt_wrapper(data_point):
         return generate_and_tokenize_prompt_cr(data_point, tokenizer, args)
 
-    train_dataset = data["train"].shuffle(seed=args.seed).map(
+    train_dataset = train_split.shuffle(seed=args.seed).map(
         generate_and_tokenize_prompt_wrapper,
         num_proc=8,
-        remove_columns=data["train"].column_names  # Remove original columns
+        remove_columns=train_split.column_names  # Remove original columns
     )
 
     train_dataset = train_dataset.filter(

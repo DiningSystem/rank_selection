@@ -290,6 +290,45 @@ class HFMoEBackend:
         return decoded
 
 
+    def _score_choice_chunk(self, scored_inputs, results, normalize):
+        max_len = max(len(input_ids) for _, _, input_ids, _, _ in scored_inputs)
+        pad_id = self.tokenizer.pad_token_id
+        input_tensor = torch.full((len(scored_inputs), max_len), pad_id, dtype=torch.long, device=self.device)
+        attention_mask = torch.zeros_like(input_tensor)
+        for row_idx, (_, _, input_ids, _, _) in enumerate(scored_inputs):
+            seq = torch.tensor(input_ids, dtype=torch.long, device=self.device)
+            input_tensor[row_idx, : len(input_ids)] = seq
+            attention_mask[row_idx, : len(input_ids)] = 1
+
+        with torch.inference_mode():
+            outputs = self.model(input_ids=input_tensor, attention_mask=attention_mask, use_cache=False)
+            log_probs = torch.log_softmax(outputs.logits.float(), dim=-1)
+
+        for row_idx, (prompt_idx, choice, input_ids, prompt_len, choice_len) in enumerate(scored_inputs):
+            token_scores = []
+            # Token at position p is predicted by logits at p - 1.
+            for pos in range(prompt_len, prompt_len + choice_len):
+                token_id = input_ids[pos]
+                token_scores.append(log_probs[row_idx, pos - 1, token_id])
+            score = torch.stack(token_scores).sum()
+            if normalize and token_scores:
+                score = score / len(token_scores)
+            results[prompt_idx][choice] = float(score.detach().cpu())
+
+        del input_tensor, attention_mask, outputs, log_probs
+
+    def _score_choice_chunk_oom_safe(self, scored_inputs, results, normalize):
+        try:
+            self._score_choice_chunk(scored_inputs, results, normalize)
+        except RuntimeError as exc:
+            if "out of memory" not in str(exc).lower() or len(scored_inputs) <= 1:
+                raise
+            if self.device.startswith("cuda"):
+                torch.cuda.empty_cache()
+            mid = max(1, len(scored_inputs) // 2)
+            self._score_choice_chunk_oom_safe(scored_inputs[:mid], results, normalize)
+            self._score_choice_chunk_oom_safe(scored_inputs[mid:], results, normalize)
+
     def score_choices(self, prompts, choices, choice_template="{choice}", normalize=True):
         scored_inputs = []
         for prompt_idx, prompt in enumerate(prompts):
@@ -304,32 +343,11 @@ class HFMoEBackend:
                 input_ids = truncated_prompt_ids + choice_ids
                 scored_inputs.append((prompt_idx, choice, input_ids, len(truncated_prompt_ids), len(choice_ids)))
 
-        max_len = max(len(input_ids) for _, _, input_ids, _, _ in scored_inputs)
-        pad_id = self.tokenizer.pad_token_id
-        input_tensor = torch.full((len(scored_inputs), max_len), pad_id, dtype=torch.long, device=self.device)
-        attention_mask = torch.zeros_like(input_tensor)
-        for row_idx, (_, _, input_ids, _, _) in enumerate(scored_inputs):
-            seq = torch.tensor(input_ids, dtype=torch.long, device=self.device)
-            input_tensor[row_idx, : len(input_ids)] = seq
-            attention_mask[row_idx, : len(input_ids)] = 1
-
-        with torch.inference_mode():
-            outputs = self.model(input_ids=input_tensor, attention_mask=attention_mask, use_cache=False)
-            log_probs = torch.log_softmax(outputs.logits.float(), dim=-1)
-
         results = [dict() for _ in prompts]
-        for row_idx, (prompt_idx, choice, input_ids, prompt_len, choice_len) in enumerate(scored_inputs):
-            token_scores = []
-            # Token at position p is predicted by logits at p - 1.
-            for pos in range(prompt_len, prompt_len + choice_len):
-                token_id = input_ids[pos]
-                token_scores.append(log_probs[row_idx, pos - 1, token_id])
-            score = torch.stack(token_scores).sum()
-            if normalize and token_scores:
-                score = score / len(token_scores)
-            results[prompt_idx][choice] = float(score.detach().cpu())
-
-        del input_tensor, attention_mask, outputs, log_probs
+        max_scored_sequences = max(1, int(os.getenv("HF_MOE_SCORE_BATCH_SIZE", "16")))
+        for start in range(0, len(scored_inputs), max_scored_sequences):
+            chunk = scored_inputs[start:start + max_scored_sequences]
+            self._score_choice_chunk_oom_safe(chunk, results, normalize)
         return results
 
     def generate(self, prompts, sampling_params):

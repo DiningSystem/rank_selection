@@ -200,6 +200,8 @@ if __name__ == "__main__":
     # Dataset arguments
     parser.add_argument("--data_path", type=str, default="data/commonsense/commonsense_170k.json", help="Path to the training data")
     parser.add_argument('--train_on_inputs', action='store_true', help='Train on inputs')
+    parser.add_argument("--boolq_oversample_factor", type=int, default=1, help="Repeat BoolQ-style true/false training examples by this factor")
+    parser.add_argument("--boolq_false_oversample_factor", type=int, default=1, help="Repeat BoolQ false-label examples by this factor for calibration")
 
     parser.add_argument("--model", type=str, default="meta-llama/Llama-3.2-3B", help="Model name")
     parser.add_argument("--hf_cache_dir", type=str, default=None, help="HF cache directory for model/tokenizer weights")
