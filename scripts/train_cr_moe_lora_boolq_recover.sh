@@ -1,20 +1,21 @@
 #!/bin/bash
 
-# BoolQ recovery preset for the case where all commonsense datasets are healthy
-# but BoolQ stalls around ~70% with a true-label bias.
-# Main changes from train_cr_moe_lora.sh:
-# - Mildly lower LR and longer warmup to reduce binary-label overconfidence.
-# - Softer final router temperature for better true/false calibration.
-# - Conservative BoolQ replay, with extra false-label replay to counter the
-#   observed prediction distribution skew toward true.
-# - Slightly smaller HF input worker count for shared machines; raise if desired.
+# BoolQ-focused commonsense MoE-LoRA preset without data replay/oversampling.
+# This keeps the original Commonsense170K data distribution and targets BoolQ
+# gains through sequence length, calibration-friendly optimization, and router
+# stability rather than changing BoolQ exposure:
+# - 512-token contexts preserve longer BoolQ passages.
+# - Lower LR, longer warmup, and modest dropout reduce binary-label
+#   overconfidence.
+# - Softer router temperatures and stronger load balancing improve calibration
+#   without replaying true/false examples.
+# - Keep batch/accumulation large for stable gradients; if memory-constrained,
+#   reduce --moe_router_hidden_dim before reducing --max_seq_length.
 
 CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --peft_method=moe_lora \
   --epochs=2 \
   --max_seq_length=512 \
-  --boolq_oversample_factor=2 \
-  --boolq_false_oversample_factor=3 \
   --moe_r_max=32 \
   --moe_top_k=4 \
   --moe_router_hidden_dim=512 \
