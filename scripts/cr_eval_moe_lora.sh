@@ -13,6 +13,8 @@ EVAL_TEMPERATURE=${EVAL_TEMPERATURE:-0.0}
 EVAL_TOP_P=${EVAL_TOP_P:-1.0}
 EVAL_TOP_K=${EVAL_TOP_K:--1}
 EVAL_MAX_TOKENS=${EVAL_MAX_TOKENS:-32}
+EVAL_SAVE_PREDICTIONS=${EVAL_SAVE_PREDICTIONS:-0}
+EVAL_PREDICTION_OUTPUT_DIR=${EVAL_PREDICTION_OUTPUT_DIR:-}
 RUN_DIRS=()
 
 source scripts/moe_eval_common.sh
@@ -69,6 +71,13 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     EFFECTIVE_CR_BS="$HF_BATCH_SIZE_CR"
   fi
   echo "=== Using backend=$BACKEND_MODE for MoE eval (batch_size=${EFFECTIVE_CR_BS}) ==="
+  EXTRA_EVAL_ARGS=()
+  if [ "$EVAL_SAVE_PREDICTIONS" = "1" ]; then
+    EXTRA_EVAL_ARGS+=(--save_predictions)
+    if [ -n "$EVAL_PREDICTION_OUTPUT_DIR" ]; then
+      EXTRA_EVAL_ARGS+=(--prediction_output_dir "$EVAL_PREDICTION_OUTPUT_DIR")
+    fi
+  fi
 
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
@@ -84,7 +93,8 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
       --top_k "$EVAL_TOP_K" \
       --max_tokens "$EVAL_MAX_TOKENS" \
       --tensor_parallel_size 1 \
-      --run_dir "$RUN_ROOT"
+      --run_dir "$RUN_ROOT" \
+      "${EXTRA_EVAL_ARGS[@]}"
   done
 done
 
