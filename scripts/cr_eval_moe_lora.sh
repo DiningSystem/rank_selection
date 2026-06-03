@@ -7,12 +7,22 @@ GPU_ID=0
 BASE_MODEL=${BASE_MODEL:-""}
 PREPARE_MOE_EVAL=${PREPARE_MOE_EVAL:-auto}
 VLLM_BATCH_SIZE_CR=${VLLM_BATCH_SIZE_CR:-128}
-HF_BATCH_SIZE_CR=${HF_BATCH_SIZE_CR:-128}
+# HF MoE keeps the model in eager PyTorch and is more memory-sensitive than vLLM.
+# Keep the default conservative; override HF_BATCH_SIZE_CR upward on larger GPUs.
+HF_BATCH_SIZE_CR=${HF_BATCH_SIZE_CR:-16}
 EVAL_BACKEND=${EVAL_BACKEND:-hf_moe}
 EVAL_TEMPERATURE=${EVAL_TEMPERATURE:-0.0}
 EVAL_TOP_P=${EVAL_TOP_P:-1.0}
 EVAL_TOP_K=${EVAL_TOP_K:--1}
 EVAL_MAX_TOKENS=${EVAL_MAX_TOKENS:-32}
+EVAL_MODE=${EVAL_MODE:-generate}
+EVAL_CHOICE_TEMPLATE=${EVAL_CHOICE_TEMPLATE:-the correct answer is {choice}}
+EVAL_NO_NORMALIZE_CHOICES=${EVAL_NO_NORMALIZE_CHOICES:-0}
+HF_MOE_SCORE_BATCH_SIZE=${HF_MOE_SCORE_BATCH_SIZE:-16}
+export HF_MOE_SCORE_BATCH_SIZE
+EVAL_DATASETS=${EVAL_DATASETS:-}
+EVAL_SAVE_PREDICTIONS=${EVAL_SAVE_PREDICTIONS:-0}
+EVAL_PREDICTION_OUTPUT_DIR=${EVAL_PREDICTION_OUTPUT_DIR:-}
 RUN_DIRS=()
 
 source scripts/moe_eval_common.sh
@@ -27,16 +37,20 @@ if [ "${#RUN_DIRS[@]}" -eq 0 ]; then
   exit 1
 fi
 
-declare -a DATASETS=(
-  "ARC-Challenge"
-  "ARC-Easy"
-  "boolq"
-  "hellaswag"
-  "openbookqa"
-  "piqa"
-  "social_i_qa"
-  "winogrande"
-)
+if [ -n "$EVAL_DATASETS" ]; then
+  read -r -a DATASETS <<< "$EVAL_DATASETS"
+else
+  declare -a DATASETS=(
+    "ARC-Challenge"
+    "ARC-Easy"
+    "boolq"
+    "hellaswag"
+    "openbookqa"
+    "piqa"
+    "social_i_qa"
+    "winogrande"
+  )
+fi
 
 for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
   RUN_DIR="$(printf '%s' "$RAW_RUN_DIR" | sed 's/\r$//')"
@@ -69,6 +83,16 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
     EFFECTIVE_CR_BS="$HF_BATCH_SIZE_CR"
   fi
   echo "=== Using backend=$BACKEND_MODE for MoE eval (batch_size=${EFFECTIVE_CR_BS}) ==="
+  EXTRA_EVAL_ARGS=()
+  if [ "$EVAL_NO_NORMALIZE_CHOICES" = "1" ]; then
+    EXTRA_EVAL_ARGS+=(--no_normalize_choices)
+  fi
+  if [ "$EVAL_SAVE_PREDICTIONS" = "1" ]; then
+    EXTRA_EVAL_ARGS+=(--save_predictions)
+    if [ -n "$EVAL_PREDICTION_OUTPUT_DIR" ]; then
+      EXTRA_EVAL_ARGS+=(--prediction_output_dir "$EVAL_PREDICTION_OUTPUT_DIR")
+    fi
+  fi
 
   for dataset in "${DATASETS[@]}"; do
     echo "--- Dataset: $dataset ---"
@@ -83,8 +107,11 @@ for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
       --top_p "$EVAL_TOP_P" \
       --top_k "$EVAL_TOP_K" \
       --max_tokens "$EVAL_MAX_TOKENS" \
+      --eval_mode "$EVAL_MODE" \
+      --choice_template "$EVAL_CHOICE_TEMPLATE" \
       --tensor_parallel_size 1 \
-      --run_dir "$RUN_ROOT"
+      --run_dir "$RUN_ROOT" \
+      "${EXTRA_EVAL_ARGS[@]}"
   done
 done
 
