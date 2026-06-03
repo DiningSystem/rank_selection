@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 import json
 import re
 import sys
@@ -101,6 +102,8 @@ def commonsense_test(
     top_p=1.0,
     top_k=-1,
     max_tokens=32,
+    save_predictions=False,
+    prediction_output_dir=None,
 ):
     """Main evaluation function for commonsense tasks."""
     torch.cuda.empty_cache()
@@ -134,6 +137,8 @@ def commonsense_test(
     res_completions = []
     result = []
     invalid_outputs = []
+    wrong_outputs = []
+    prediction_records = []
 
     # Generate responses
     print("\nGenerating responses...")
@@ -164,18 +169,52 @@ def commonsense_test(
         pred = extract_answer(dataset_name, completion)
         is_correct = (pred == answer)
         result.append(is_correct)
-        
-        if not is_correct and not pred:
-            temp = {'instruction': instruction, 'output': completion, 'answer': answer}
-            invalid_outputs.append(temp)
+        record = {
+            'idx': idx,
+            'instruction': instruction,
+            'output': completion,
+            'pred': pred,
+            'answer': answer,
+            'correct': is_correct,
+        }
+        prediction_records.append(record)
+
+        if not is_correct:
+            wrong_outputs.append(record)
+            if not pred:
+                invalid_outputs.append(record)
 
     # Calculate and log metrics
     acc = sum(result) / len(result)
+    answer_counts = Counter(answers)
+    pred_counts = Counter(record['pred'] for record in prediction_records)
+    wrong_pred_counts = Counter(record['pred'] for record in wrong_outputs)
     wandb.log({
         f"eval/{dataset_name}_acc": acc,
+        f"eval/{dataset_name}_invalid_outputs": len(invalid_outputs),
     })
 
     print(f'Invalid outputs count: {len(invalid_outputs)}')
+    print(f'Wrong outputs count: {len(wrong_outputs)}')
+    print(f'Gold answer distribution: {dict(answer_counts)}')
+    print(f'Prediction distribution: {dict(pred_counts)}')
+    print(f'Wrong prediction distribution: {dict(wrong_pred_counts)}')
+    if save_predictions:
+        output_dir = prediction_output_dir or os.path.join(os.getcwd(), 'eval_predictions')
+        os.makedirs(output_dir, exist_ok=True)
+        safe_dataset_name = dataset_name.replace('/', '_')
+        suffix = f'{start}_{end if end != MAX_INT else "end"}'
+        prediction_path = os.path.join(output_dir, f'{safe_dataset_name}_{suffix}_predictions.jsonl')
+        wrong_path = os.path.join(output_dir, f'{safe_dataset_name}_{suffix}_wrong.jsonl')
+        with open(prediction_path, 'w') as f:
+            for record in prediction_records:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        with open(wrong_path, 'w') as f:
+            for record in wrong_outputs:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        print(f'Saved predictions to: {prediction_path}')
+        print(f'Saved wrong outputs to: {wrong_path}')
+
     print(f'Evaluation range: start={start}, end={end}')
     print(f'Total evaluated: {len(result)}, Accuracy: {acc:.4f}')
     
@@ -214,12 +253,19 @@ def parse_args():
                       help="Maximum generated tokens per sample")
     parser.add_argument("--run_dir", type=str,
                       help="Directory containing the wandb run ID")
+    parser.add_argument("--save_predictions", action="store_true",
+                      help="Save per-example predictions and wrong outputs as JSONL files")
+    parser.add_argument("--prediction_output_dir", type=str, default=None,
+                      help="Directory for saved prediction JSONL files; defaults to run_dir/eval_predictions when run_dir is set")
 
     args = parser.parse_args()
     
     # Set default data file path if not provided
     if args.data_file is None:
         args.data_file = f'data/commonsense/{args.dataset}/test.json'
+
+    if args.save_predictions and args.prediction_output_dir is None and args.run_dir:
+        args.prediction_output_dir = os.path.join(args.run_dir, "eval_predictions")
 
     # Initialize wandb
     if args.run_dir:
@@ -254,4 +300,6 @@ if __name__ == "__main__":
         top_p=args.top_p,
         top_k=args.top_k,
         max_tokens=args.max_tokens,
+        save_predictions=args.save_predictions,
+        prediction_output_dir=args.prediction_output_dir,
     )
