@@ -104,7 +104,7 @@ This preset is tuned for the common failure mode where BoolQ lags after the othe
 - `--moe_router_norm_type=rmsnorm`
 - `--moe_router_activation=silu`
 
-If the run is unstable or your GPU runs out of memory, try these in order: reduce `--moe_router_hidden_dim` to `384`, reduce `--moe_top_k` to `3`, or reduce `--max_seq_length` back to `256`. If BoolQ is still low without ARC-Challenge dropping, keep `--lr=8e-4` and try only `--moe_router_temperature_end=0.9`; if ARC-Challenge regresses, restore `--moe_router_temperature_end=0.75`.
+If BoolQ is still around 70 without replay/oversampling, use `scripts/train_cr_moe_lora_boolq_recover.sh` instead of adding replay back. The recovery preset now keeps the main training length and adapter scaling fixed (`--epochs=2`, `--lora_alpha=32`) and moves the recovery budget to context/router/calibration: `--max_seq_length=1024`, `--moe_r_max=32`, `--moe_top_k=6`, `--moe_router_hidden_dim=768`, `--lr=1e-3`, `--moe_router_lr=7.5e-5`, `--warmup_ratio=0.015`, and `--moe_router_temperature_end=1.05`. If the run is unstable or your GPU runs out of memory, first fall back to `--max_seq_length=768` and `--moe_router_hidden_dim=512`; keep `--epochs=2` and `--lora_alpha=32` unchanged.
 
 Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
