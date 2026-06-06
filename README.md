@@ -104,7 +104,7 @@ This preset is tuned for the common failure mode where BoolQ lags after the othe
 - `--moe_router_norm_type=rmsnorm`
 - `--moe_router_activation=silu`
 
-If the run is unstable or your GPU runs out of memory, try these in order: reduce `--moe_router_hidden_dim` to `384`, reduce `--moe_top_k` to `3`, or reduce `--max_seq_length` back to `256`. If BoolQ is still low without ARC-Challenge dropping, keep `--lr=8e-4` and try only `--moe_router_temperature_end=0.9`; if ARC-Challenge regresses, restore `--moe_router_temperature_end=0.75`.
+If BoolQ is still around 70 without replay/oversampling, use `scripts/train_cr_moe_lora_boolq_recover.sh` instead of adding replay back. The recovery preset now allows `--epochs=3` but preserves the baseline optimizer-step budget from `--batch_size=6 --grad_acc_steps=24 --epochs=2`: because baseline effective exposure per step is `6*24=144`, the 3-epoch preset uses `--batch_size=6 --grad_acc_steps=36` for an effective batch of `216`, keeping `3/216 = 2/144` while matching the baseline per-device batch. Do not increase the effective batch beyond `216` for accuracy; if memory is tight at 768 tokens, reduce per-device batch and raise accumulation to keep the product fixed, such as `--batch_size=3 --grad_acc_steps=72` or `--batch_size=2 --grad_acc_steps=108`. The recommended retrain config is `--max_seq_length=768`, `--moe_top_k=3`, `--moe_router_hidden_dim=512`, `--lr=7e-4`, `--moe_router_lr=5e-5`, `--warmup_ratio=0.04`, `--lora_dropout=0.03`, `--moe_load_balance_loss_weight=3e-4`, and `--moe_router_temperature_end=1.15`.
 
 Run the following to evaluate on commonsense reasoning benchmarks:
 ```bash
