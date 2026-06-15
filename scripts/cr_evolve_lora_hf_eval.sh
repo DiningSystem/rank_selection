@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODEL=${MODEL:-"meta-llama/Llama-3.2-3B"}
 GPU_ID=${GPU_ID:-0}
-BATCH_SIZE=${BATCH_SIZE:-8}
+BATCH_SIZE=${BATCH_SIZE:-128}
 TORCH_DTYPE=${TORCH_DTYPE:-"bfloat16"}
 DEVICE_MAP=${DEVICE_MAP:-"auto"}
 MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-32}
