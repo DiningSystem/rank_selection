@@ -117,3 +117,56 @@ If you use our work, please cite us:
   year={2024}
 }
 ```
+
+## evolve-LoRA training and inference
+
+This repo also includes an input-conditioned spectral LoRA path based on
+`U diag(lambda(x)) V^T`. Existing ABBA training remains the default; select the
+new adapter with `--adapter_type evolve_lora`.
+
+Arithmetic training:
+
+```bash
+bash scripts/train_arithmetic_evolve_lora.sh \
+  --model mistralai/Mistral-7B-v0.1 \
+  --dataset_split 'train[:50000]'
+```
+
+Commonsense training:
+
+```bash
+bash scripts/train_cr_evolve_lora.sh \
+  --model meta-llama/Llama-3.2-3B \
+  --data_path data/commonsense/commonsense_170k.json
+```
+
+Useful loss controls are `--evolve_r_min`, `--evolve_beta`,
+`--evolve_alpha_max`, `--evolve_anneal_k`, `--evolve_gate_floor`, and
+`--evolve_complexity_ema`. The trainer logs effective rank, information-rank
+loss, and annealed rank pressure under the `evolve/*` metric names.
+
+HF inference with a saved adapter:
+
+```bash
+bash scripts/infer_evolve_lora_hf.sh \
+  mistralai/Mistral-7B-v0.1 \
+  /path/to/run/final_model \
+  'Solve: 17 * 23 =' \
+  --max_new_tokens 128
+```
+
+The shell wrapper calls the Python entrypoint below, which is useful when you
+want to pass every option explicitly:
+
+```bash
+python inference_evolve_lora.py \
+  --backend hf \
+  --model mistralai/Mistral-7B-v0.1 \
+  --adapter_path /path/to/run/final_model \
+  --prompt 'Solve: 17 * 23 ='
+```
+
+vLLM note: raw evolve-LoRA adapters are input-conditioned Python modules and are
+not static LoRA deltas. Use `--backend hf` for adapter inference. The `vllm`
+backend in `inference_evolve_lora.py` is provided only for full model directories
+that are already compatible with vLLM, and it will reject raw adapter paths.

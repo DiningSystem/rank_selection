@@ -189,3 +189,27 @@ def create_peft_model_cr_abba(model, args):
     model = get_abba_model(model, abba_config)
 
     return model, abba_config
+
+# evolve-LoRA helpers are kept separate from ABBA so existing ABBA code paths remain unchanged.
+from evolve_lora import EvolveLoRAConfig, apply_evolve_lora
+
+
+def create_peft_model_it_evolve_lora(model, args):
+    config = EvolveLoRAConfig(
+        r_max=args.lora_r,
+        r_min=args.evolve_r_min,
+        alpha=args.lora_alpha,
+        dropout=args.lora_dropout,
+        target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
+        gate_floor=args.evolve_gate_floor,
+        detach_router_input=not args.evolve_no_detach_router,
+        beta=args.evolve_beta,
+        alpha_max=args.evolve_alpha_max,
+        anneal_k=args.evolve_anneal_k,
+        complexity_ema=args.evolve_complexity_ema,
+    )
+    return apply_evolve_lora(model, config), config
+
+
+def create_peft_model_cr_evolve_lora(model, args):
+    return create_peft_model_it_evolve_lora(model, args)
