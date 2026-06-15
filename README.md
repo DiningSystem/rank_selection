@@ -148,6 +148,17 @@ loss, and annealed rank pressure under the `evolve/*` metric names.
 HF inference with a saved adapter:
 
 ```bash
+bash scripts/infer_evolve_lora_hf.sh \
+  mistralai/Mistral-7B-v0.1 \
+  /path/to/run/final_model \
+  'Solve: 17 * 23 =' \
+  --max_new_tokens 128
+```
+
+The shell wrapper calls the Python entrypoint below, which is useful when you
+want to pass every option explicitly:
+
+```bash
 python inference_evolve_lora.py \
   --backend hf \
   --model mistralai/Mistral-7B-v0.1 \

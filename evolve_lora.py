@@ -49,12 +49,15 @@ class SpectralLoRALayer(nn.Module):
         self.gate_floor = gate_floor
         self.detach_router_input = detach_router_input
         hidden_dim = max(1, self.in_features // 2)
-        self.U = nn.Parameter(torch.randn(self.out_features, r_max) * 0.02)
-        self.V = nn.Parameter(torch.randn(self.in_features, r_max) * 0.02)
+        weight = base_layer.weight
+        adapter_dtype = weight.dtype
+        adapter_device = weight.device
+        self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
+        self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
         self.router = nn.Sequential(
-            nn.Linear(self.in_features, hidden_dim),
+            nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
             nn.GELU(),
-            nn.Linear(hidden_dim, r_max),
+            nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=adapter_dtype),
         )
         self.dropout = nn.Dropout(dropout)
         self.merged = False
@@ -66,12 +69,15 @@ class SpectralLoRALayer(nn.Module):
         if self.disable_adapters or self.merged:
             self.last_lambdas = None
             return y
-        router_input = x.detach() if self.detach_router_input else x
+        adapter_dtype = self.U.dtype
+        adapter_input = x.to(adapter_dtype)
+        router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
-        self.last_lambdas = lambdas
-        dropped = self.dropout(x)
+        self.last_lambdas = lambdas.float()
+        dropped = self.dropout(adapter_input)
         spectral = (dropped @ self.V) * lambdas
-        return y + (spectral @ self.U.t()) * self.scaling
+        adapter_out = (spectral @ self.U.t()) * self.scaling
+        return y + adapter_out.to(y.dtype)
 
     def merge(self):
         raise RuntimeError("Evolve-LoRA is input-conditioned and cannot be exactly merged into static weights.")
@@ -193,16 +199,17 @@ class EvolveLoRATrainer(Trainer):
         if cfg is None or lambdas is None or not hasattr(outputs, "logits"):
             return (task_loss, outputs) if return_outputs else task_loss
         with torch.no_grad():
-            complexity = sequence_complexity(outputs.logits.detach()).reshape(-1)
+            complexity = sequence_complexity(outputs.logits.detach().float()).reshape(-1)
             current = complexity.mean()
             self._complexity_ema = current if self._complexity_ema is None else cfg.complexity_ema * self._complexity_ema + (1 - cfg.complexity_ema) * current
             smoothed = complexity + (self._complexity_ema - current)
-        erank = effective_rank(lambdas)
+        erank = effective_rank(lambdas.float())
         if erank.numel() != smoothed.numel():
             smoothed = smoothed.mean().expand_as(erank)
-        info_loss = F.mse_loss(erank, target_rank(smoothed, cfg.r_min, cfg.r_max))
+        target = target_rank(smoothed, cfg.r_min, cfg.r_max).to(device=erank.device, dtype=erank.dtype)
+        info_loss = F.mse_loss(erank, target)
         alpha_t = anneal_alpha(self.state.global_step, cfg.alpha_max, cfg.anneal_k)
         rank_reg = erank.mean()
-        loss = task_loss + alpha_t * rank_reg + cfg.beta * info_loss
+        loss = task_loss.float() + alpha_t * rank_reg + cfg.beta * info_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/info_loss": info_loss.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
