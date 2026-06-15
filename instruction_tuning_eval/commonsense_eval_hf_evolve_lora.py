@@ -10,6 +10,10 @@ import wandb
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(CURRENT_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
 from evolve_lora import EvolveLoRAConfig, apply_evolve_lora, set_evolve_lora_state_dict
 
 MAX_INT = sys.maxsize
