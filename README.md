@@ -170,3 +170,17 @@ vLLM note: raw evolve-LoRA adapters are input-conditioned Python modules and are
 not static LoRA deltas. Use `--backend hf` for adapter inference. The `vllm`
 backend in `inference_evolve_lora.py` is provided only for full model directories
 that are already compatible with vLLM, and it will reject raw adapter paths.
+
+Commonsense evolve-LoRA HF evaluation uses the same dataset set as `scripts/cr_merge_eval.sh`
+(`ARC-Challenge`, `ARC-Easy`, `boolq`, `hellaswag`, `openbookqa`, `piqa`,
+`social_i_qa`, and `winogrande`) but does not merge the adapter because
+input-conditioned evolve-LoRA gates cannot be represented as a static weight delta:
+
+```bash
+MODEL=meta-llama/Llama-3.2-3B \
+BATCH_SIZE=8 \
+bash scripts/cr_evolve_lora_hf_eval.sh /path/to/commonsense/run_dir
+```
+
+You can also pass `/path/to/commonsense/run_dir/final_model` directly. The script
+logs each dataset accuracy to the run's WandB ID when `wandb_run_id.txt` exists.
