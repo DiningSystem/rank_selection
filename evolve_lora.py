@@ -15,6 +15,7 @@ from transformers import Trainer
 class EvolveLoRAConfig:
     r_max: int = 32
     r_min: int = 2
+    evolve_rank_delay_ratio: float = 0.15
     alpha: float = 16.0
     dropout: float = 0.0
     target_modules: Optional[Union[List[str], str]] = None
@@ -176,8 +177,12 @@ def target_rank(complexity, r_min, r_max):
     return r_min + (r_max - r_min) * norm_c
 
 
-def anneal_alpha(step, alpha_max=0.01, k=5e-5):
-    return alpha_max * (1 - math.exp(-k * step))
+def anneal_alpha(step, max_step, alpha_max=0.01, k=5e-5):
+    if step > max_step:
+        step_new = step - max_step
+        return alpha_max * (1 - math.exp(-k * step_new))
+    else:
+        return 0.0
 
 
 class EvolveLoRATrainer(Trainer):
@@ -208,7 +213,8 @@ class EvolveLoRATrainer(Trainer):
             smoothed = smoothed.mean().expand_as(erank)
         target = target_rank(smoothed, cfg.r_min, cfg.r_max).to(device=erank.device, dtype=erank.dtype)
         info_loss = F.mse_loss(erank, target)
-        alpha_t = anneal_alpha(self.state.global_step, cfg.alpha_max, cfg.anneal_k)
+        rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
+        alpha_t = anneal_alpha(self.state.global_step, rank_delay_step, cfg.alpha_max, cfg.anneal_k)
         rank_reg = erank.mean()
         loss = task_loss.float() + alpha_t * rank_reg + cfg.beta * info_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/info_loss": info_loss.detach().item(), "evolve/alpha": alpha_t})

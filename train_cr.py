@@ -108,7 +108,7 @@ def finetune():
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         learning_rate=args.lr,
-        weight_decay=0,
+        weight_decay=0.01,
         warmup_ratio=args.warmup_ratio,
         lr_scheduler_type=args.scheduler,
         seed=args.seed,
@@ -171,11 +171,12 @@ if __name__ == "__main__":
     parser.add_argument("--hf_prefer_safetensors", action="store_true", help="Prefer safetensors and skip .bin/.pth files during preload when possible")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
     parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora"], help="Adapter implementation to train")
-    parser.add_argument("--evolve_r_min", type=int, default=4, help="Minimum target effective rank for evolve-LoRA")
-    parser.add_argument("--evolve_beta", type=float, default=0.003, help="Information-conditioned rank consistency weight")
-    parser.add_argument("--evolve_alpha_max", type=float, default=0.001, help="Maximum temporal effective-rank pressure")
+    parser.add_argument("--evolve_rank_delay_ratio", type=float, default=0.15, help="Delay rank ratio before training")
+    parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
+    parser.add_argument("--evolve_beta", type=float, default=0.02, help="Information-conditioned rank consistency weight")
+    parser.add_argument("--evolve_alpha_max", type=float, default=0.003, help="Maximum temporal effective-rank pressure")
     parser.add_argument("--evolve_anneal_k", type=float, default=5e-6, help="Temporal rank-pressure annealing rate")
-    parser.add_argument("--evolve_gate_floor", type=float, default=0.1, help="Minimum spectral gate value")
+    parser.add_argument("--evolve_gate_floor", type=float, default=0.15, help="Minimum spectral gate value")
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
     parser.add_argument("--evolve_no_detach_router", action="store_true", help="Allow router gradients through hidden states")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
