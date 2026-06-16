@@ -65,7 +65,7 @@ def finetune():
     # Initialize wandb with the run directory
     wandb_run_name = os.path.basename(run_dir)
     wandb_run = wandb.init(
-        project="project_name`",
+        project="project_name",
         config=args,
         dir=os.path.join(run_dir, "logs")
     )
@@ -171,10 +171,10 @@ if __name__ == "__main__":
     parser.add_argument("--hf_prefer_safetensors", action="store_true", help="Prefer safetensors and skip .bin/.pth files during preload when possible")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
     parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora"], help="Adapter implementation to train")
-    parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
-    parser.add_argument("--evolve_beta", type=float, default=0.01, help="Information-conditioned rank consistency weight")
-    parser.add_argument("--evolve_alpha_max", type=float, default=0.002, help="Maximum temporal effective-rank pressure")
-    parser.add_argument("--evolve_anneal_k", type=float, default=1e-5, help="Temporal rank-pressure annealing rate")
+    parser.add_argument("--evolve_r_min", type=int, default=4, help="Minimum target effective rank for evolve-LoRA")
+    parser.add_argument("--evolve_beta", type=float, default=0.003, help="Information-conditioned rank consistency weight")
+    parser.add_argument("--evolve_alpha_max", type=float, default=0.001, help="Maximum temporal effective-rank pressure")
+    parser.add_argument("--evolve_anneal_k", type=float, default=5e-6, help="Temporal rank-pressure annealing rate")
     parser.add_argument("--evolve_gate_floor", type=float, default=0.1, help="Minimum spectral gate value")
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
     parser.add_argument("--evolve_no_detach_router", action="store_true", help="Allow router gradients through hidden states")
