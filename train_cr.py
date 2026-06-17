@@ -189,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument("--scheduler", type=str, default="linear", help="Learning rate scheduler")
     parser.add_argument("--warmup_ratio", type=float, default=0.1, help="Warmup steps")
     parser.add_argument("--max_seq_length", type=int, default=256, help="Maximum sequence length")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=4e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     
