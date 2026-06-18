@@ -175,7 +175,7 @@ if __name__ == "__main__":
     parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
     parser.add_argument("--evolve_beta", type=float, default=0.015, help="Information-conditioned rank consistency weight")
     parser.add_argument("--evolve_alpha_max", type=float, default=0.003, help="Maximum temporal effective-rank pressure")
-    parser.add_argument("--evolve_anneal_k", type=float, default=4e-6, help="Temporal rank-pressure annealing rate")
+    parser.add_argument("--evolve_anneal_k", type=float, default=1e-5, help="Temporal rank-pressure annealing rate")
     parser.add_argument("--evolve_gate_floor", type=float, default=0.12, help="Minimum spectral gate value")
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
     parser.add_argument("--evolve_no_detach_router", action="store_true", default=False, help="Allow router gradients through hidden states")
@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--epochs", type=int, default=2, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="linear", help="Learning rate scheduler")
-    parser.add_argument("--warmup_ratio", type=float, default=0.06, help="Warmup steps")
+    parser.add_argument("--warmup_ratio", type=float, default=0.1, help="Warmup steps")
     parser.add_argument("--max_seq_length", type=int, default=256, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=6e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
