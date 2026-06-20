@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--epochs", type=int, default=2, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="linear", help="Learning rate scheduler")
-    parser.add_argument("--warmup_ratio", type=float, default=0.1, help="Warmup steps")
+    parser.add_argument("--warmup_ratio", type=float, default=0.08, help="Warmup steps")
     parser.add_argument("--max_seq_length", type=int, default=256, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=3.5e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
