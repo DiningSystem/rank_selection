@@ -181,7 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--evolve_no_detach_router", action="store_true", default=False, help="Allow router gradients through hidden states")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha value")
-    parser.add_argument("--lora_dropout", type=float, default=0.039, help="LoRA dropout value")
+    parser.add_argument("--lora_dropout", type=float, default=0.045, help="LoRA dropout value")
     parser.add_argument("--batch_size", type=int, default=6, help="Batch size")
     parser.add_argument("--grad_acc_steps", type=int, default=24, help="Gradient accumulation steps")
 
