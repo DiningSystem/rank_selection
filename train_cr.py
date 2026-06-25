@@ -181,7 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--evolve_no_detach_router", action="store_true", default=False, help="Allow router gradients through hidden states")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha value")
-    parser.add_argument("--lora_dropout", type=float, default=0.045, help="LoRA dropout value")
+    parser.add_argument("--lora_dropout", type=float, default=0.041, help="LoRA dropout value")
     parser.add_argument("--batch_size", type=int, default=6, help="Batch size")
     parser.add_argument("--grad_acc_steps", type=int, default=24, help="Gradient accumulation steps")
 
@@ -189,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument("--scheduler", type=str, default="linear", help="Learning rate scheduler")
     parser.add_argument("--warmup_ratio", type=float, default=0.075, help="Warmup steps")
     parser.add_argument("--max_seq_length", type=int, default=256, help="Maximum sequence length")
-    parser.add_argument("--lr", type=float, default=3.025e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=3.015e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     
