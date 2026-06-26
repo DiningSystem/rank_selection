@@ -68,6 +68,10 @@ def load_evolve_lora_for_hf(base_model, adapter_path, torch_dtype="bfloat16", de
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "left"
+    # Preserve the answer choices / answer-format suffix when prompts exceed
+    # the context window. Right truncation can remove that suffix and makes HF
+    # evaluation underperform the vLLM path on long commonsense prompts.
+    tokenizer.truncation_side = "left"
 
     with open(os.path.join(adapter_path, "adapter_config.json"), "r") as f:
         config = EvolveLoRAConfig(**json.load(f))
@@ -79,7 +83,8 @@ def load_evolve_lora_for_hf(base_model, adapter_path, torch_dtype="bfloat16", de
 
 
 def commonsense_test_hf(base_model, adapter_path, dataset_name, data_path, start=0, end=MAX_INT,
-                        batch_size=1, max_new_tokens=32, torch_dtype="bfloat16", device_map="auto"):
+                        batch_size=1, max_new_tokens=32, torch_dtype="bfloat16", device_map="auto",
+                        temperature=0.1, top_p=0.75, top_k=40, seed=0):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
@@ -92,22 +97,34 @@ def commonsense_test_hf(base_model, adapter_path, dataset_name, data_path, start
     instructions = [data.get("instruction") for data in dataset]
     answers = [data.get("answer") for data in dataset]
     model, tokenizer = load_evolve_lora_for_hf(base_model, adapter_path, torch_dtype=torch_dtype, device_map=device_map)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
     stop_token_ids = [tokenizer.eos_token_id]
+    model_max_length = getattr(tokenizer, "model_max_length", None)
+    if model_max_length is None or model_max_length > 100_000:
+        model_max_length = getattr(model.config, "max_position_embeddings", None)
+    max_input_length = None
+    if model_max_length:
+        max_input_length = max(1, int(model_max_length) - max_new_tokens)
     res_completions = []
 
     print("\nGenerating responses with Hugging Face backend...")
     for prompts in tqdm(batch_data(instructions, batch_size), desc="Generating responses", ncols=100):
         formatted_prompts = [generate_prompt(instruction) for instruction in prompts]
-        inputs = tokenizer(formatted_prompts, return_tensors="pt", padding=True, truncation=True).to(model.device)
+        tokenizer_kwargs = {"return_tensors": "pt", "padding": True}
+        if max_input_length is not None:
+            tokenizer_kwargs.update({"truncation": True, "max_length": max_input_length})
+        inputs = tokenizer(formatted_prompts, **tokenizer_kwargs).to(model.device)
         input_length = inputs["input_ids"].shape[1]
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                do_sample=True,
-                temperature=0.1,
-                top_p=0.75,
-                top_k=40,
+                do_sample=temperature > 0,
+                temperature=temperature if temperature > 0 else None,
+                top_p=top_p,
+                top_k=top_k,
                 max_new_tokens=max_new_tokens,
                 eos_token_id=stop_token_ids,
                 pad_token_id=tokenizer.pad_token_id,
@@ -155,6 +172,10 @@ def parse_args():
     parser.add_argument("--max_new_tokens", type=int, default=32)
     parser.add_argument("--torch_dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--device_map", type=str, default="auto")
+    parser.add_argument("--temperature", type=float, default=0.1, help="HF sampling temperature; defaults to the vLLM eval value")
+    parser.add_argument("--top_p", type=float, default=0.75, help="HF nucleus sampling value; defaults to the vLLM eval value")
+    parser.add_argument("--top_k", type=int, default=40, help="HF top-k sampling value; defaults to the vLLM eval value")
+    parser.add_argument("--seed", type=int, default=0, help="Seed HF sampling for reproducible eval")
     parser.add_argument("--run_dir", type=str, help="Directory containing the wandb run ID")
     args = parser.parse_args()
 
@@ -189,4 +210,8 @@ if __name__ == "__main__":
         max_new_tokens=args.max_new_tokens,
         torch_dtype=args.torch_dtype,
         device_map=args.device_map,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        seed=args.seed,
     )
