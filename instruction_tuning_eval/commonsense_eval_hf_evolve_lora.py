@@ -237,8 +237,8 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.1, help="HF sampling temperature; defaults to the vLLM eval value")
     parser.add_argument("--top_p", type=float, default=0.75, help="HF nucleus sampling value; defaults to the vLLM eval value")
     parser.add_argument("--top_k", type=int, default=40, help="HF top-k sampling value; defaults to the vLLM eval value")
-    parser.add_argument("--seed", type=int, default=0, help="Seed HF sampling for reproducible eval")
-    parser.add_argument("--inference_mode", choices=["rank", "generate"], default="rank",
+    parser.add_argument("--seed", type=int, default=42, help="Seed HF sampling for reproducible eval")
+    parser.add_argument("--inference_mode", choices=["rank", "generate"], default="generate",
                         help="Use rank to score valid answer labels directly, avoiding sampling-induced eval drift; use generate to keep open-ended generation")
     parser.add_argument("--run_dir", type=str, help="Directory containing the wandb run ID")
     args = parser.parse_args()
