@@ -162,7 +162,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", type=str, default="data/commonsense/commonsense_170k.json", help="Path to the training data")
     parser.add_argument('--train_on_inputs', action='store_true', help='Train on inputs')
 
-    parser.add_argument("--model", type=str, default="meta-llama/Llama-3.2-3B", help="Model name")
+    parser.add_argument("--model", type=str, default="meta-llama/Llama-3.2-1B", help="Model name")
     parser.add_argument("--hf_cache_dir", type=str, default=None, help="HF cache directory for model/tokenizer weights")
     parser.add_argument("--hf_fast_download", action="store_true", help="Enable accelerated HF Hub download and parallel loading")
     parser.add_argument("--hf_preload", action="store_true", help="Pre-download full model snapshot before from_pretrained")
