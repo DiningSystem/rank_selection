@@ -2,7 +2,7 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --adapter_type evolve_lora \
   --hf_fast_download --hf_preload --hf_prefer_safetensors "$@" \
   --model "meta-llama/Llama-3.2-1B" \
-  --evolve_rank_delay_ratio 0.2 \
+  --evolve_rank_delay_ratio 0.17 \
   --evolve_r_min 2 \
   --evolve_beta 0.015 \
   --evolve_alpha_max 0.003 \
@@ -11,11 +11,11 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --evolve_complexity_ema 0.9 \
   --lora_r 32 \
   --lora_alpha 32 \
-  --lora_dropout 0.04 \
+  --lora_dropout 0.03 \
   --batch_size 6 \
   --grad_acc_steps 24 \
   --epochs 2 \
   --scheduler linear \
-  --warmup_ratio 0.1 \
+  --warmup_ratio 0.09 \
   --max_seq_length 256 \
-  --lr 4e-4
+  --lr 4.1e-4
