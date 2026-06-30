@@ -11,11 +11,11 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --evolve_complexity_ema 0.9 \
   --lora_r 32 \
   --lora_alpha 32 \
-  --lora_dropout 0.04 \
+  --lora_dropout 0.045 \
   --batch_size 6 \
   --grad_acc_steps 24 \
   --epochs 2 \
   --scheduler linear \
-  --warmup_ratio 0.11 \
+  --warmup_ratio 0.09 \
   --max_seq_length 256 \
-  --lr 4.05e-4
+  --lr 3.96e-4
