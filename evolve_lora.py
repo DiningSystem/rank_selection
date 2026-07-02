@@ -216,6 +216,6 @@ class EvolveLoRATrainer(Trainer):
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = anneal_alpha(self.state.global_step, rank_delay_step, cfg.alpha_max, cfg.anneal_k)
         rank_reg = erank.mean()
-        loss = task_loss.float() + alpha_t * rank_reg + cfg.beta * info_loss
+        loss = task_loss.float() + alpha_t * rank_reg # + cfg.beta * info_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/info_loss": info_loss.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
