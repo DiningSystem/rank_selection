@@ -5,17 +5,17 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --evolve_rank_delay_ratio 0.5 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.001 \
-  --evolve_anneal_k 8e-6 \
-  --evolve_gate_floor 0.12 \
+  --evolve_alpha_max 0.003 \
+  --evolve_anneal_k 9e-6 \
+  --evolve_gate_floor 0.1 \
   --evolve_complexity_ema 0.9 \
   --lora_r 32 \
   --lora_alpha 32 \
-  --lora_dropout 0.045 \
+  --lora_dropout 0.05 \
   --batch_size 6 \
   --grad_acc_steps 24 \
   --epochs 2 \
   --scheduler linear \
-  --warmup_ratio 0.01 \
+  --warmup_ratio 0.02 \
   --max_seq_length 256 \
   --lr 1e-3
