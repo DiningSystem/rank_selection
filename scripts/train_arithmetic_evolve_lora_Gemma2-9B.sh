@@ -7,14 +7,14 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --model "google/gemma-2-9b" \
   --evolve_rank_delay_ratio 0.15 \
   --evolve_r_min 2 \
-  --evolve_beta 0.05 \
+  --evolve_beta 0 \
   --evolve_alpha_max 0.01 \
   --evolve_anneal_k 5e-5 \
   --evolve_gate_floor 0.05 \
   --evolve_complexity_ema 0.9 \
   --evolve_router_hidden_dim 128 \
   --lora_r 32 \
-  --lora_alpha 16 \
+  --lora_alpha 32 \
   --lora_dropout 0 \
   --batch_size 1 \
   --grad_acc_steps 32 \
