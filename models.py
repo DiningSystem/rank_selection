@@ -208,6 +208,7 @@ def create_peft_model_it_evolve_lora(model, args):
         alpha_max=args.evolve_alpha_max,
         anneal_k=args.evolve_anneal_k,
         complexity_ema=args.evolve_complexity_ema,
+        router_hidden_dim=getattr(args, "evolve_router_hidden_dim", 64),
     )
     return apply_evolve_lora(model, config), config
 

@@ -27,6 +27,7 @@ class EvolveLoRAConfig:
     complexity_ema: float = 0.9
     bias: str = "none"
     modules_to_save: Optional[List[str]] = None
+    router_hidden_dim: int = 64
 
     def __post_init__(self):
         if self.target_modules is None:
@@ -38,7 +39,7 @@ class SpectralLoRALayer(nn.Module):
 
     def __init__(self, base_layer: nn.Module, r_max: int = 32, alpha: float = 16.0,
                  dropout: float = 0.0, gate_floor: float = 0.05,
-                 detach_router_input: bool = True):
+                 detach_router_input: bool = True, router_hidden_dim: int = 64):
         super().__init__()
         if not hasattr(base_layer, "weight"):
             raise ValueError("Layer doesn't have a weight attribute")
@@ -49,7 +50,7 @@ class SpectralLoRALayer(nn.Module):
         self.scaling = alpha / max(r_max, 1)
         self.gate_floor = gate_floor
         self.detach_router_input = detach_router_input
-        hidden_dim = max(1, self.in_features // 2)
+        hidden_dim = max(1, router_hidden_dim)
         weight = base_layer.weight
         adapter_dtype = weight.dtype
         adapter_device = weight.device
@@ -130,7 +131,8 @@ def apply_evolve_lora(model, config: EvolveLoRAConfig):
                 if part:
                     parent = getattr(parent, part)
             setattr(parent, target_name, SpectralLoRALayer(module, config.r_max, config.alpha, config.dropout,
-                                                          config.gate_floor, config.detach_router_input))
+                                                          config.gate_floor, config.detach_router_input,
+                                                          config.router_hidden_dim))
             model.evolve_lora_layers.add(name)
     model.mark_only_evolve_lora_as_trainable = types.MethodType(mark_only_evolve_lora_as_trainable, model)
     model.save_pretrained = types.MethodType(save_pretrained, model)
