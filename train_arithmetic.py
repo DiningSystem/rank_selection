@@ -111,7 +111,7 @@ def finetune():
         lr_scheduler_type=args.scheduler,
         seed=args.seed,
         report_to="wandb",
-        gradient_accumulation_steps=32,
+        gradient_accumulation_steps=args.grad_acc_steps,
         save_strategy="no",
         bf16=True,
         tf32=False,
@@ -168,6 +168,7 @@ if __name__ == "__main__":
     parser.add_argument("--hf_prefer_safetensors", action="store_true", help="Prefer safetensors and skip .bin/.pth files during preload when possible")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
     parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora"], help="Adapter implementation to train")
+    parser.add_argument("--evolve_rank_delay_ratio", type=float, default=0.15, help="Delay rank ratio before training")
     parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
     parser.add_argument("--evolve_beta", type=float, default=0.05, help="Information-conditioned rank consistency weight")
     parser.add_argument("--evolve_alpha_max", type=float, default=0.01, help="Maximum temporal effective-rank pressure")
@@ -179,6 +180,7 @@ if __name__ == "__main__":
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha value")
     parser.add_argument("--lora_dropout", type=float, default=0, help="LoRA dropout value")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
+    parser.add_argument("--grad_acc_steps", type=int, default=32, help="Gradient accumulation steps")
     parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="cosine", help="Learning rate scheduler")
     parser.add_argument("--warmup_ratio", type=float, default=0.02, help="Warmup ratio")
