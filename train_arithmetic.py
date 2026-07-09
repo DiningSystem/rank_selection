@@ -111,7 +111,7 @@ def finetune():
         lr_scheduler_type=args.scheduler,
         seed=args.seed,
         report_to="wandb",
-        gradient_accumulation_steps=32,
+        gradient_accumulation_steps=args.grad_acc_steps,
         save_strategy="no",
         bf16=True,
         tf32=False,
@@ -119,6 +119,7 @@ def finetune():
         logging_steps=1,
         logging_first_step=True,
         logging_dir=os.path.join(run_dir, "logs"),
+        gradient_checkpointing=args.gradient_checkpointing,
     )
     
     # Save training arguments
@@ -140,6 +141,16 @@ def finetune():
     tokenizer.save_pretrained(os.path.join(run_dir, "tokenizer"))
     
     # Training
+    model.config.use_cache = False
+    if args.gradient_checkpointing:
+        # Required when the base model is frozen and only adapter/router weights train;
+        # otherwise checkpointed blocks can return losses without a grad_fn.
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
+        else:
+            def make_inputs_require_grad(module, input, output):
+                output.requires_grad_(True)
+            model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
     trainer.train()
     
     # After training
@@ -168,23 +179,27 @@ if __name__ == "__main__":
     parser.add_argument("--hf_prefer_safetensors", action="store_true", help="Prefer safetensors and skip .bin/.pth files during preload when possible")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
     parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora"], help="Adapter implementation to train")
+    parser.add_argument("--evolve_rank_delay_ratio", type=float, default=0.15, help="Delay rank ratio before training")
     parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
     parser.add_argument("--evolve_beta", type=float, default=0.05, help="Information-conditioned rank consistency weight")
     parser.add_argument("--evolve_alpha_max", type=float, default=0.01, help="Maximum temporal effective-rank pressure")
     parser.add_argument("--evolve_anneal_k", type=float, default=5e-5, help="Temporal rank-pressure annealing rate")
     parser.add_argument("--evolve_gate_floor", type=float, default=0.05, help="Minimum spectral gate value")
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
+    parser.add_argument("--evolve_router_hidden_dim", type=int, default=64, help="Hidden dimension for evolve-LoRA routers; keep small to avoid OOM on 7B/9B models")
     parser.add_argument("--evolve_no_detach_router", action="store_true", help="Allow router gradients through hidden states")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value (assigns half of this to each adapter)")
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha value")
     parser.add_argument("--lora_dropout", type=float, default=0, help="LoRA dropout value")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
+    parser.add_argument("--grad_acc_steps", type=int, default=32, help="Gradient accumulation steps")
     parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
     parser.add_argument("--scheduler", type=str, default="cosine", help="Learning rate scheduler")
     parser.add_argument("--warmup_ratio", type=float, default=0.02, help="Warmup ratio")
     parser.add_argument("--max_seq_length", type=int, default=512, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--gradient_checkpointing", action=argparse.BooleanOptionalAction, default=True, help="Enable gradient checkpointing to reduce activation memory")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
         
     args = parser.parse_args()

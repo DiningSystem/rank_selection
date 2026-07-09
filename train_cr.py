@@ -121,6 +121,7 @@ def finetune():
         logging_steps=1,
         logging_first_step=True,
         logging_dir=os.path.join(run_dir, "logs"),
+        gradient_checkpointing=args.gradient_checkpointing,
     )
     
     # Save training arguments
@@ -144,6 +145,15 @@ def finetune():
     
     # Training
     model.config.use_cache = False
+    if args.gradient_checkpointing:
+        # Required when the base model is frozen and only adapter/router weights train;
+        # otherwise checkpointed blocks can return losses without a grad_fn.
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
+        else:
+            def make_inputs_require_grad(module, input, output):
+                output.requires_grad_(True)
+            model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
     trainer.train()
     
     # After training
@@ -178,6 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--evolve_anneal_k", type=float, default=8.5e-6, help="Temporal rank-pressure annealing rate")
     parser.add_argument("--evolve_gate_floor", type=float, default=0.12, help="Minimum spectral gate value")
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
+    parser.add_argument("--evolve_router_hidden_dim", type=int, default=64, help="Hidden dimension for evolve-LoRA routers; keep small to avoid OOM on 7B/9B models")
     parser.add_argument("--evolve_no_detach_router", action="store_true", default=False, help="Allow router gradients through hidden states")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha value")
@@ -191,6 +202,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_seq_length", type=int, default=256, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=3.051e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--gradient_checkpointing", action=argparse.BooleanOptionalAction, default=True, help="Enable gradient checkpointing to reduce activation memory")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     
     args = parser.parse_args()
