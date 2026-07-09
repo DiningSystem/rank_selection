@@ -50,7 +50,8 @@ class SpectralLoRALayer(nn.Module):
         self.scaling = alpha / max(r_max, 1)
         self.gate_floor = gate_floor
         self.detach_router_input = detach_router_input
-        hidden_dim = max(1, router_hidden_dim)
+        hidden_dim = min (self.in_features // 2, router_hidden_dim)
+        hidden_dim = max(1, hidden_dim)
         weight = base_layer.weight
         adapter_dtype = weight.dtype
         adapter_device = weight.device
