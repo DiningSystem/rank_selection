@@ -204,9 +204,11 @@ def create_peft_model_it_evolve_lora(model, args):
         gate_floor=args.evolve_gate_floor,
         detach_router_input=not args.evolve_no_detach_router,
         beta=args.evolve_beta,
+        evolve_rank_delay_ratio=getattr(args, "evolve_rank_delay_ratio", 0.15),
         alpha_max=args.evolve_alpha_max,
         anneal_k=args.evolve_anneal_k,
         complexity_ema=args.evolve_complexity_ema,
+        router_hidden_dim=getattr(args, "evolve_router_hidden_dim", 64),
     )
     return apply_evolve_lora(model, config), config
 

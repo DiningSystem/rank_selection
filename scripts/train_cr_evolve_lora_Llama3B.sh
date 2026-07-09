@@ -10,6 +10,7 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --evolve_anneal_k 8e-6 \
   --evolve_gate_floor 0.12 \
   --evolve_complexity_ema 0.9 \
+  --evolve_router_hidden_dim 64 \
   --lora_r 32 \
   --lora_alpha 32 \
   --lora_dropout 0.05 \
