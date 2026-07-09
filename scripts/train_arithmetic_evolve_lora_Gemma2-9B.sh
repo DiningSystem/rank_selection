@@ -12,7 +12,7 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --evolve_anneal_k 5e-5 \
   --evolve_gate_floor 0.05 \
   --evolve_complexity_ema 0.9 \
-  --evolve_router_hidden_dim 64 \
+  --evolve_router_hidden_dim 128 \
   --lora_r 32 \
   --lora_alpha 16 \
   --lora_dropout 0 \
@@ -22,4 +22,4 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --scheduler cosine \
   --warmup_ratio 0.02 \
   --max_seq_length 512 \
-  --lr 1e-4
+  --lr 1e-3
