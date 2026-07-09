@@ -209,15 +209,15 @@ class EvolveLoRATrainer(Trainer):
             complexity = sequence_complexity(outputs.logits.detach().float()).reshape(-1)
             current = complexity.mean()
             self._complexity_ema = current if self._complexity_ema is None else cfg.complexity_ema * self._complexity_ema + (1 - cfg.complexity_ema) * current
-            smoothed = complexity + (self._complexity_ema - current)
+            #smoothed = complexity + (self._complexity_ema - current)
         erank = effective_rank(lambdas.float())
-        if erank.numel() != smoothed.numel():
-            smoothed = smoothed.mean().expand_as(erank)
-        target = target_rank(smoothed, cfg.r_min, cfg.r_max).to(device=erank.device, dtype=erank.dtype)
-        info_loss = F.mse_loss(erank, target)
+        #if erank.numel() != smoothed.numel():
+        #    smoothed = smoothed.mean().expand_as(erank)
+        #target = target_rank(smoothed, cfg.r_min, cfg.r_max).to(device=erank.device, dtype=erank.dtype)
+        #info_loss = F.mse_loss(erank, target)
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = anneal_alpha(self.state.global_step, rank_delay_step, cfg.alpha_max, cfg.anneal_k)
         rank_reg = erank.mean()
         loss = task_loss.float() + alpha_t * rank_reg # + cfg.beta * info_loss
-        self.log({"evolve/erank": rank_reg.detach().item(), "evolve/info_loss": info_loss.detach().item(), "evolve/alpha": alpha_t})
+        self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
