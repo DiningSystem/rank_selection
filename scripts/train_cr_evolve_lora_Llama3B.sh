@@ -3,14 +3,14 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --lora_r 32 \
   --hf_fast_download --hf_preload --hf_prefer_safetensors "$@" \
   --model "meta-llama/Llama-3.2-3B" \
-  --evolve_rank_delay_ratio 0.5 \
+  --evolve_rank_delay_ratio 0.6 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
   --evolve_alpha_max 0.001 \
   --evolve_anneal_k 8e-6 \
   --evolve_gate_floor 0.12 \
   --evolve_complexity_ema 0.9 \
-  --evolve_router_hidden_dim 128 \
+  --evolve_router_hidden_dim 256 \
   --lora_r 32 \
   --lora_alpha 32 \
   --lora_dropout 0.05 \
