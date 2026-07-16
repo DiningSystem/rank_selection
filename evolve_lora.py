@@ -59,7 +59,7 @@ class SpectralLoRALayer(nn.Module):
         self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
         self.router = nn.Sequential(
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
-            nn.GELU(),
+            nn.SiLU(),
             nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=adapter_dtype),
         )
         self.dropout = nn.Dropout(dropout)
