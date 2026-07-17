@@ -78,7 +78,7 @@ class SpectralLoRALayer(nn.Module):
         nn.init.normal_(self.U, std=std)
         nn.init.normal_(self.V, std=std)
         self.router = nn.Sequential(
-            nn.LayerNorm(self.in_features, device=adapter_device, dtype=adapter_dtype),
+            #nn.LayerNorm(self.in_features, device=adapter_device, dtype=adapter_dtype),
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
             nn.GELU(),
             nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=adapter_dtype),
