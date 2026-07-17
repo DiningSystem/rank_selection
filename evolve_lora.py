@@ -55,9 +55,28 @@ class SpectralLoRALayer(nn.Module):
         weight = base_layer.weight
         adapter_dtype = weight.dtype
         adapter_device = weight.device
-        self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
-        self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
+        self.U = nn.Parameter(
+            torch.empty(
+                self.out_features,
+                r_max,
+                device=adapter_device,
+                dtype=adapter_dtype,
+                )
+            )
+
+        self.V = nn.Parameter(
+            torch.empty(
+                self.in_features,
+                r_max,
+                device=adapter_device,
+                dtype=adapter_dtype,
+                )
+            )
+
+        nn.init.normal_(self.U, std=0.01)
+        nn.init.zeros_(self.V)
         self.router = nn.Sequential(
+            nn.LayerNorm(self.in_features, device=adapter_device, dtype=adapter_dtype),
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
             nn.GELU(),
             nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=adapter_dtype),
