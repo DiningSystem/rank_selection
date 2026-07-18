@@ -144,22 +144,61 @@ def apply_evolve_lora(model, config: EvolveLoRAConfig):
     return model
 
 
-def set_evolve_lora_state_dict(model, adapter_state_dict: Dict[str, torch.Tensor]):
+def set_evolve_lora_state_dict(model, adapter_state_dict):
     for name, module in model.named_modules():
-        if isinstance(module, SpectralLoRALayer):
-            if f"{name}.U" in adapter_state_dict:
-                module.U.data.copy_(adapter_state_dict[f"{name}.U"].to(module.U.device, module.U.dtype))
-            if f"{name}.V" in adapter_state_dict:
-                module.V.data.copy_(adapter_state_dict[f"{name}.V"].to(module.V.device, module.V.dtype))
-            prefix = f"{name}.router."
-            for i, layer in enumerate(module.router):
-                params = list(layer.parameters())
-                if not params:
+        if not isinstance(module, SpectralLoRALayer):
+            continue
+
+        # -----------------------
+        # Load U and V
+        # -----------------------
+        for param_name in ["U", "V"]:
+            full_key = f"{name}.{param_name}"
+            if full_key in adapter_state_dict:
+                getattr(module, param_name).data.copy_(
+                    adapter_state_dict[full_key].to(
+                        getattr(module, param_name).device,
+                        getattr(module, param_name).dtype,
+                    )
+                )
+
+        # -----------------------
+        # Load router
+        # -----------------------
+        prefix = f"{name}.router."
+
+        for i, layer in enumerate(module.router):
+
+            expected_sd = layer.state_dict()
+
+            if len(expected_sd) == 0:
+                continue
+
+            new_sd = {}
+
+            for key, expected_tensor in expected_sd.items():
+                full_key = f"{prefix}{i}.{key}"
+
+                if full_key not in adapter_state_dict:
+                    print(f"[Missing] {full_key}")
                     continue
-                sd = {k.rsplit('.', 1)[-1]: v.to(params[0].device, params[0].dtype)
-                      for k, v in adapter_state_dict.items() if k.startswith(f"{prefix}{i}.")}
-                if sd:
-                    layer.load_state_dict(sd, strict=False)
+
+                tensor = adapter_state_dict[full_key].to(
+                    expected_tensor.device,
+                    expected_tensor.dtype,
+                )
+
+                if tensor.shape != expected_tensor.shape:
+                    raise RuntimeError(
+                        f"\nShape mismatch\n"
+                        f"Key       : {full_key}\n"
+                        f"Checkpoint: {tuple(tensor.shape)}\n"
+                        f"Expected  : {tuple(expected_tensor.shape)}"
+                    )
+
+                new_sd[key] = tensor
+
+            layer.load_state_dict(new_sd, strict=False)
 
 
 def compute_entropy(logits):
