@@ -60,7 +60,6 @@ class SpectralLoRALayer(nn.Module):
 
         
         self.router = nn.Sequential(
-            nn.RMSNorm(self.in_features, device=adapter_device, dtype=adapter_dtype),
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
             nn.GELU(),
             nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=adapter_dtype),
@@ -144,82 +143,22 @@ def apply_evolve_lora(model, config: EvolveLoRAConfig):
     return model
 
 
-def set_evolve_lora_state_dict(model, adapter_state_dict):
+def set_evolve_lora_state_dict(model, adapter_state_dict: Dict[str, torch.Tensor]):
     for name, module in model.named_modules():
-        if not isinstance(module, SpectralLoRALayer):
-            continue
-
-        # -----------------------
-        # Load U and V
-        # -----------------------
-        for param_name in ["U", "V"]:
-            full_key = f"{name}.{param_name}"
-            if full_key in adapter_state_dict:
-                getattr(module, param_name).data.copy_(
-                    adapter_state_dict[full_key].to(
-                        getattr(module, param_name).device,
-                        getattr(module, param_name).dtype,
-                    )
-                )
-
-        # -----------------------
-        # Load router
-        # -----------------------
-        prefix = f"{name}.router."
-
-        # -------------------------------------------------------
-        # Detect checkpoint format
-        # -------------------------------------------------------
-        has_rms = False
-        rms_key = f"{prefix}0.weight"
-
-        if rms_key in adapter_state_dict:
-            # RMSNorm weight is always 1D
-            has_rms = adapter_state_dict[rms_key].ndim == 1
-
-        # mapping:
-        # checkpoint index -> current model index
-        if has_rms:
-            idx_map = {0: 0, 1: 1, 3: 3}
-        else:
-            # old checkpoint without RMSNorm
-            idx_map = {0: 1, 2: 3}
-
-        for ckpt_idx, model_idx in idx_map.items():
-
-            if model_idx >= len(module.router):
-                continue
-
-            layer = module.router[model_idx]
-
-            if len(layer.state_dict()) == 0:
-                continue
-
-            sd = {}
-
-            for key, expected in layer.state_dict().items():
-
-                full_key = f"{prefix}{ckpt_idx}.{key}"
-
-                if full_key not in adapter_state_dict:
+        if isinstance(module, SpectralLoRALayer):
+            if f"{name}.U" in adapter_state_dict:
+                module.U.data.copy_(adapter_state_dict[f"{name}.U"].to(module.U.device, module.U.dtype))
+            if f"{name}.V" in adapter_state_dict:
+                module.V.data.copy_(adapter_state_dict[f"{name}.V"].to(module.V.device, module.V.dtype))
+            prefix = f"{name}.router."
+            for i, layer in enumerate(module.router):
+                params = list(layer.parameters())
+                if not params:
                     continue
-
-                tensor = adapter_state_dict[full_key].to(
-                    expected.device,
-                    expected.dtype,
-                )
-
-                if tensor.shape != expected.shape:
-                    print(
-                        f"Skip {full_key}: "
-                        f"{tuple(tensor.shape)} != {tuple(expected.shape)}"
-                    )
-                    continue
-
-                sd[key] = tensor
-
-            if sd:
-                layer.load_state_dict(sd, strict=False)
+                sd = {k.rsplit('.', 1)[-1]: v.to(params[0].device, params[0].dtype)
+                      for k, v in adapter_state_dict.items() if k.startswith(f"{prefix}{i}.")}
+                if sd:
+                    layer.load_state_dict(sd, strict=False)
 
 
 def compute_entropy(logits):
