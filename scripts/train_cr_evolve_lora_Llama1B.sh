@@ -2,10 +2,10 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --adapter_type evolve_lora \
   --hf_fast_download --hf_preload --hf_prefer_safetensors "$@" \
   --model "meta-llama/Llama-3.2-1B" \
-  --evolve_rank_delay_ratio 0.2 \
+  --evolve_rank_delay_ratio 0.12 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.00099 \
+  --evolve_alpha_max 0.001 \
   --evolve_anneal_k 0 \
   --evolve_gate_floor 0.12 \
   --evolve_complexity_ema 0.9 \
