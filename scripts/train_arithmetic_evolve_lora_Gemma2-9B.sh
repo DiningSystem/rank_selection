@@ -5,12 +5,12 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --adapter_type evolve_lora \
   --hf_fast_download --hf_preload --hf_prefer_safetensors "$@" \
   --model "google/gemma-2-9b" \
-  --evolve_rank_delay_ratio 0.15 \
+  --evolve_rank_delay_ratio 0.2 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.01 \
-  --evolve_anneal_k 5e-5 \
-  --evolve_gate_floor 0.05 \
+  --evolve_alpha_max 0.001 \
+  --evolve_anneal_k 0.0 \
+  --evolve_gate_floor 0.0 \
   --evolve_complexity_ema 0.9 \
   --evolve_router_hidden_dim 128 \
   --lora_r 32 \

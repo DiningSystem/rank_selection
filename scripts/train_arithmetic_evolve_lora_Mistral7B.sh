@@ -6,12 +6,12 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --hf_fast_download --hf_preload --hf_prefer_safetensors "$@" \
   --model "mistralai/Mistral-7B-v0.1" \
   --evolve_router_hidden_dim 128 \
-  --evolve_rank_delay_ratio 0.5 \
+  --evolve_rank_delay_ratio 0.2 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.01 \
-  --evolve_anneal_k 5e-5 \
-  --evolve_gate_floor 0.12 \
+  --evolve_alpha_max 0.001 \
+  --evolve_anneal_k 0.0 \
+  --evolve_gate_floor 0.0 \
   --evolve_complexity_ema 0.9 \
   --lora_r 32 \
   --lora_alpha 32 \
