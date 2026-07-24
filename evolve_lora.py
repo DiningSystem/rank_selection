@@ -53,6 +53,7 @@ class SpectralLoRALayer(nn.Module):
         weight = base_layer.weight
         adapter_dtype = weight.dtype
         adapter_device = weight.device
+        self.log_temperature = nn.Parameter(torch.zeros(()))
         self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02) 
         self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
 
@@ -77,7 +78,11 @@ class SpectralLoRALayer(nn.Module):
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
         router_logits = self.router(router_input)
-        lambdas = torch.softmax(router_logits / self.gate_floor, dim=-1)
+
+        temperature = self.log_temperature.exp()
+        temperature = temperature.clamp(0.3, 3.0)
+
+        lambdas = torch.softmax(router_logits / temperature, dim=-1)
 
         # Rescale so average lambda is approximately 1
         lambdas = lambdas * self.r_max
