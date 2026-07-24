@@ -79,8 +79,7 @@ class SpectralLoRALayer(nn.Module):
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
         router_logits = self.router(router_input)
 
-        temperature = self.log_temperature.exp()
-        temperature = temperature.clamp(0.3, 3.0)
+        temperature = 0.5
 
         lambdas = torch.softmax(router_logits / temperature, dim=-1)
 
