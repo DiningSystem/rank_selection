@@ -11,7 +11,7 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --evolve_beta 0 \
   --evolve_alpha_max 0.01 \
   --evolve_anneal_k 0.0 \
-  --evolve_gate_floor 0.0 \
+  --evolve_gate_floor 0.12 \
   --evolve_complexity_ema 0.9 \
   --lora_r 32 \
   --lora_alpha 32 \
