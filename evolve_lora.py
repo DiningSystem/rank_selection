@@ -1,5 +1,4 @@
 import json
-import math
 import os
 import types
 from dataclasses import dataclass
@@ -7,7 +6,6 @@ from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from transformers import Trainer
 
 
@@ -161,40 +159,20 @@ def set_evolve_lora_state_dict(model, adapter_state_dict: Dict[str, torch.Tensor
                     layer.load_state_dict(sd, strict=False)
 
 
-def compute_entropy(logits):
-    probs = torch.softmax(logits, dim=-1)
-    return -(probs * torch.log(probs + 1e-8)).sum(dim=-1)
-
-
-def sequence_complexity(logits):
-    return compute_entropy(logits).mean(dim=-1)
-
-
 def effective_rank(lambdas):
     probs = lambdas / (lambdas.sum(dim=-1, keepdim=True) + 1e-8)
     entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=-1)
     return torch.exp(entropy)
 
 
-def target_rank(complexity, r_min, r_max):
-    c_min, c_max = complexity.min().detach(), complexity.max().detach()
-    norm_c = (complexity - c_min) / (c_max - c_min + 1e-8)
-    return r_min + (r_max - r_min) * norm_c
-
-
-def anneal_alpha(step, max_step, alpha_max=0.01, k=5e-5):
-    if step > max_step:
-        step_new = step - max_step
-        return alpha_max * (1 - math.exp(-k * step_new))
-    else:
-        return 0.0
+def rank_regularizer_weight(step, start_step, alpha_max=0.01):
+    return alpha_max if step >= start_step else 0.0
 
 
 class EvolveLoRATrainer(Trainer):
     def __init__(self, *args, evolve_lora_config: Optional[EvolveLoRAConfig] = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.evolve_lora_config = evolve_lora_config or getattr(self.model, "evolve_lora_config", None)
-        self._complexity_ema = None
 
     def _collect_lambdas(self):
         vals = [m.last_lambdas.reshape(-1, m.r_max) for m in self.model.modules()
@@ -208,19 +186,10 @@ class EvolveLoRATrainer(Trainer):
         lambdas = self._collect_lambdas()
         if cfg is None or lambdas is None or not hasattr(outputs, "logits"):
             return (task_loss, outputs) if return_outputs else task_loss
-        with torch.no_grad():
-            complexity = sequence_complexity(outputs.logits.detach().float()).reshape(-1)
-            current = complexity.mean()
-            self._complexity_ema = current if self._complexity_ema is None else cfg.complexity_ema * self._complexity_ema + (1 - cfg.complexity_ema) * current
-            #smoothed = complexity + (self._complexity_ema - current)
         erank = effective_rank(lambdas.float())
-        #if erank.numel() != smoothed.numel():
-        #    smoothed = smoothed.mean().expand_as(erank)
-        #target = target_rank(smoothed, cfg.r_min, cfg.r_max).to(device=erank.device, dtype=erank.dtype)
-        #info_loss = F.mse_loss(erank, target)
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
-        alpha_t = anneal_alpha(self.state.global_step, rank_delay_step, cfg.alpha_max, cfg.anneal_k)
+        alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
-        loss = task_loss.float() + alpha_t * rank_reg # + cfg.beta * info_loss
+        loss = task_loss.float() + alpha_t * rank_reg
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
