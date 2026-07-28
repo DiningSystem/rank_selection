@@ -8,9 +8,9 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --evolve_rank_delay_ratio 0 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.00001 \
+  --evolve_alpha_max 0.0001 \
   --evolve_anneal_k 0 \
-  --evolve_gate_floor 0.12 \
+  --evolve_gate_floor 0.1 \
   --evolve_complexity_ema 0.9 \
   --evolve_router_hidden_dim 128 \
   --lora_r 32 \
