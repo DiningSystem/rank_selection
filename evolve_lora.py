@@ -62,8 +62,7 @@ class SpectralLoRALayer(nn.Module):
                 r_max,
                 self.out_features,
                 bias=False,
-                device=adapter_device,
-                dtype=torch.float32
+                device=adapter_device, type=torch.float32
             )
         )
 
@@ -72,8 +71,7 @@ class SpectralLoRALayer(nn.Module):
                 r_max,
                 self.in_features,
                 bias=False,
-                device=adapter_device,
-                dtype=torch.float32
+                device=adapter_device, type=torch.float32
             )
         )
         
