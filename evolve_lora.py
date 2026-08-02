@@ -51,7 +51,7 @@ class SpectralLoRALayer(nn.Module):
         hidden_dim = min (self.in_features // 2, router_hidden_dim)
         hidden_dim = max(1, hidden_dim)
         weight = base_layer.weight
-        adapter_dtype = weight.dtype
+        self.adapter_dtype = weight.dtype
         adapter_device = weight.device
         self.log_temperature = nn.Parameter(torch.zeros(()))
 
@@ -62,7 +62,7 @@ class SpectralLoRALayer(nn.Module):
                 r_max,
                 self.out_features,
                 bias=False,
-                device=adapter_device, type=torch.float32
+                device=adapter_device, dtype=torch.float32
             )
         )
 
@@ -71,14 +71,14 @@ class SpectralLoRALayer(nn.Module):
                 r_max,
                 self.in_features,
                 bias=False,
-                device=adapter_device, type=torch.float32
+                device=adapter_device, dtype=torch.float32
             )
         )
         
         self.router = nn.Sequential(
-            nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
+            nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=self.adapter_dtype),
             nn.GELU(),
-            nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=adapter_dtype),
+            nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=self.adapter_dtype),
         )
         self.dropout = nn.Dropout(dropout)
         self.merged = False
@@ -90,8 +90,8 @@ class SpectralLoRALayer(nn.Module):
         if self.disable_adapters or self.merged:
             self.last_lambdas = None
             return y
-        adapter_dtype = self.U.dtype
-        adapter_input = x.to(adapter_dtype)
+        #adapter_dtype = self.U.dtype
+        adapter_input = x.to(self.adapter_dtype)
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
         lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.softmax(self.router(router_input), dim=-1)
