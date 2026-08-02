@@ -57,9 +57,25 @@ class SpectralLoRALayer(nn.Module):
 
         #self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02) 
         #self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=adapter_dtype) * 0.02)
-        self.U = nn.utils.parametrizations.orthogonal(nn.Linear(self.out_features, r_max, device=adapter_device, dtype=adapter_dtype, bias=False)) 
-        self.V = nn.utils.parametrizations.orthogonal(nn.Linear(self.in_features, r_max, device=adapter_device, dtype=adapter_dtype, bias=False))
-        
+        self.U = nn.utils.parametrizations.orthogonal(
+            nn.Linear(
+                r_max,
+                self.out_features,
+                bias=False,
+                device=adapter_device,
+                dtype=torch.float32
+            )
+        )
+
+        self.V = nn.utils.parametrizations.orthogonal(
+            nn.Linear(
+                r_max,
+                self.in_features,
+                bias=False,
+                device=adapter_device,
+                dtype=torch.float32
+            )
+        )
         
         self.router = nn.Sequential(
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=adapter_dtype),
@@ -81,11 +97,13 @@ class SpectralLoRALayer(nn.Module):
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
         lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.softmax(self.router(router_input), dim=-1)
-       
+        U = self.U.weight.to(adapter_input.dtype)
+        V = self.V.weight.to(adapter_input.dtype)
+
         self.last_lambdas = lambdas.float()
         dropped = self.dropout(adapter_input)
-        spectral = (dropped @ self.V) * lambdas
-        adapter_out = (spectral @ self.U.t()) * self.scaling
+        spectral = (dropped @ V) * lambdas
+        adapter_out = (spectral @ U.t()) * self.scaling
         return y + adapter_out.to(y.dtype)
 
     def merge(self):
