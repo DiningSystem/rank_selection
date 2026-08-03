@@ -56,28 +56,9 @@ class SpectralLoRALayer(nn.Module):
         adapter_device = weight.device
         self.log_temperature = nn.Parameter(torch.zeros(()))
 
-        # self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02) 
-        # self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
-        self.U = nn.Parameter(
-            torch.empty(
-                self.out_features,
-                r_max,
-                device=adapter_device,
-                dtype=self.adapter_dtype,
-            )
-        )
-
-        self.V = nn.Parameter(
-            torch.empty(
-                self.in_features,
-                r_max,
-                device=adapter_device,
-                dtype=self.adapter_dtype,
-            )
-        )
-
-        nn.init.orthogonal_(self.U)
-        nn.init.orthogonal_(self.V)
+        self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02) 
+        self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
+        
         self.router = nn.Sequential(
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=self.adapter_dtype),
             nn.GELU(),
