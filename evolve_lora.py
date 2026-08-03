@@ -26,6 +26,7 @@ class EvolveLoRAConfig:
     bias: str = "none"
     modules_to_save: Optional[List[str]] = None
     router_hidden_dim: int = 64
+    ortho_weight: float = 1e-4
 
     def __post_init__(self):
         if self.target_modules is None:
@@ -55,26 +56,28 @@ class SpectralLoRALayer(nn.Module):
         adapter_device = weight.device
         self.log_temperature = nn.Parameter(torch.zeros(()))
 
-        self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02) 
-        self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
-        # self.U = nn.utils.parametrizations.orthogonal(
-        #     nn.Linear(
-        #         r_max,
-        #         self.out_features,
-        #         bias=False,
-        #         device=adapter_device, dtype=torch.float32
-        #     )
-        # )
+        # self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02) 
+        # self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
+        self.U = nn.Parameter(
+            torch.empty(
+                self.out_features,
+                r_max,
+                device=adapter_device,
+                dtype=self.adapter_dtype,
+            )
+        )
 
-        # self.V = nn.utils.parametrizations.orthogonal(
-        #     nn.Linear(
-        #         r_max,
-        #         self.in_features,
-        #         bias=False,
-        #         device=adapter_device, dtype=torch.float32
-        #     )
-        # )
-        
+        self.V = nn.Parameter(
+            torch.empty(
+                self.in_features,
+                r_max,
+                device=adapter_device,
+                dtype=self.adapter_dtype,
+            )
+        )
+
+        nn.init.orthogonal_(self.U)
+        nn.init.orthogonal_(self.V)
         self.router = nn.Sequential(
             nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=self.adapter_dtype),
             nn.GELU(),
@@ -95,8 +98,8 @@ class SpectralLoRALayer(nn.Module):
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
         lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.softmax(self.router(router_input), dim=-1)
-        U = self.U#.weight.to(adapter_input.dtype)
-        V = self.V#.weight.to(adapter_input.dtype)
+        U = self.U
+        V = self.V
 
         self.last_lambdas = lambdas.float()
         dropped = self.dropout(adapter_input)
@@ -107,6 +110,19 @@ class SpectralLoRALayer(nn.Module):
     def merge(self):
         raise RuntimeError("Evolve-LoRA is input-conditioned and cannot be exactly merged into static weights.")
 
+
+def orthogonal_loss(U, V):
+    U = U.float()
+    V = V.float()
+
+    Iu = torch.eye(U.shape[1], device=U.device)
+    Iv = torch.eye(V.shape[1], device=V.device)
+
+    return (
+        ((U.T @ U - Iu) ** 2).sum()
+        +
+        ((V.T @ V - Iv) ** 2).sum()
+    )
 
 def get_submodules(model, key):
     if "." in key:
@@ -203,6 +219,11 @@ class EvolveLoRATrainer(Trainer):
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         outputs = model(**inputs)
+        orth_loss = 0.0
+
+        for module in model.modules():
+            if isinstance(module, SpectralLoRALayer):
+                orth_loss += orthogonal_loss(module.U, module.V)
         task_loss = outputs.loss
         cfg = self.evolve_lora_config
         lambdas = self._collect_lambdas()
@@ -212,6 +233,6 @@ class EvolveLoRATrainer(Trainer):
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
-        loss = task_loss.float() + alpha_t * rank_reg
+        loss = task_loss.float() + alpha_t * rank_reg + cfg.ortho_weight * orth_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
