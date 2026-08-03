@@ -214,6 +214,6 @@ class EvolveLoRATrainer(Trainer):
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
-        loss = task_loss.float() + alpha_t * rank_reg + cfg.ortho_weight * orth_loss
+        loss = task_loss.float() + alpha_t * rank_reg # + cfg.ortho_weight * orth_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
