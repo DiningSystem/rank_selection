@@ -185,7 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--evolve_alpha_max", type=float, default=0.01, help="Maximum temporal effective-rank pressure")
     parser.add_argument("--evolve_anneal_k", type=float, default=5e-5, help="Temporal rank-pressure annealing rate")
     parser.add_argument("--evolve_gate_floor", type=float, default=0.05, help="Minimum spectral gate value")
-    parser.add_argument("--ortho_weight", type=float, default=1e-4, help="Othogonal weight")
+    parser.add_argument("--ortho_weight", type=float, default=5e-5, help="Othogonal weight")
     
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
     parser.add_argument("--evolve_router_hidden_dim", type=int, default=64, help="Hidden dimension for evolve-LoRA routers; keep small to avoid OOM on 7B/9B models")
