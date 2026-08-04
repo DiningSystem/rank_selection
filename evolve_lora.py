@@ -81,7 +81,7 @@ class SpectralLoRALayer(nn.Module):
         lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.softmax(self.router(router_input), dim=-1)
         U = self.U
         V = self.V
-
+        lambdas = lambdas * self.r_max
         self.last_lambdas = lambdas.float()
         dropped = self.dropout(adapter_input)
         spectral = (dropped @ V) * lambdas
@@ -183,6 +183,18 @@ def effective_rank(lambdas):
     entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=-1)
     return torch.exp(entropy)
 
+def routing_entropy(router_probs, eps=1e-8):
+    p = router_probs / (router_probs.sum(dim=-1, keepdim=True) + 1e-8)
+    entropy = -(p * torch.log(p + eps)).sum(dim=-1)
+    return entropy
+
+
+def entropy_floor_loss(router_probs, target_entropy):
+    entropy = routing_entropy(router_probs)
+
+    return torch.relu(
+        target_entropy - entropy
+    ).pow(2).mean()
 
 def rank_regularizer_weight(step, start_step, alpha_max=0.01):
     return alpha_max if step >= start_step else 0.0
@@ -214,6 +226,7 @@ class EvolveLoRATrainer(Trainer):
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
-        loss = task_loss.float() + alpha_t * rank_reg  + cfg.ortho_weight * orth_loss
+        ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
+        loss = task_loss.float() + alpha_t * ent_loss  + cfg.ortho_weight * orth_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
