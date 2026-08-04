@@ -78,7 +78,9 @@ class SpectralLoRALayer(nn.Module):
         adapter_input = x.to(self.adapter_dtype)
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
+        
         lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.softmax(self.router(router_input), dim=-1)
+        self.last_router_probs = lambdas.float()
         U = self.U
         V = self.V
         lambdas = lambdas * self.r_max
@@ -100,10 +102,56 @@ def orthogonal_loss(U, V):
     Iv = torch.eye(V.shape[1], device=V.device)
 
     return (
-        ((U.T @ U - Iu) ** 2).sum()
+        ((U.T @ U - Iu) ** 2).mean()
         +
-        ((V.T @ V - Iv) ** 2).sum()
+        ((V.T @ V - Iv) ** 2).mean()
     )
+def expert_balance_loss(
+    router_probs,
+    eps=1e-8,
+):
+    """
+    Encourage diverse expert utilization across the batch.
+
+    Given:
+
+        p_{b,i}
+
+    define:
+
+        p_bar_i = mean_b p_{b,i}
+
+    and minimize:
+
+        KL(p_bar || Uniform).
+
+    This prevents the same expert from winning for
+    essentially every sample.
+    """
+
+    p = router_probs.reshape(
+        -1,
+        router_probs.shape[-1],
+    )
+
+    mean_p = p.mean(dim=0)
+
+    r = mean_p.shape[0]
+
+    uniform = torch.full_like(
+        mean_p,
+        1.0 / r,
+    )
+
+    kl = (
+        mean_p
+        * torch.log(
+            (mean_p + eps)
+            / uniform
+        )
+    ).sum()
+
+    return kl
 
 def get_submodules(model, key):
     if "." in key:
@@ -212,11 +260,44 @@ class EvolveLoRATrainer(Trainer):
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         outputs = model(**inputs)
-        orth_loss = 0.0
+        orth_losses = []
+        entropy_losses = []
+        balance_losses = []
 
         for module in model.modules():
             if isinstance(module, SpectralLoRALayer):
-                orth_loss += orthogonal_loss(module.U, module.V)
+                orth_losses.append(orthogonal_loss(module.U, module.V))
+                router_probs = (
+                module.last_router_probs
+                )
+                # ------------------------------------------------
+                # Entropy floor
+                # ------------------------------------------------
+
+                entropy_losses.append(entropy_floor_loss(lambdas.float(), 0.35)
+                    
+                )
+
+                # ------------------------------------------------
+                # Batch-level balancing
+                # ------------------------------------------------
+
+                balance_losses.append(
+                    expert_balance_loss(
+                        router_probs
+                    )
+                )
+        ent_loss = torch.stack(
+            entropy_losses
+        ).mean()
+
+        balance_loss = torch.stack(
+            balance_losses
+        ).mean()
+
+        orth_loss = torch.stack(
+            orth_losses
+        ).mean()
         task_loss = outputs.loss
         cfg = self.evolve_lora_config
         lambdas = self._collect_lambdas()
@@ -226,7 +307,8 @@ class EvolveLoRATrainer(Trainer):
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
-        ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
-        loss = task_loss.float() + alpha_t * ent_loss  + cfg.ortho_weight * orth_loss
+        #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
+        loss = task_loss.float() + alpha_t * ent_loss  + \
+            cfg.ortho_weight * orth_loss + cfg.beta * balance_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
