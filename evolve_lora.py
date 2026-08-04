@@ -274,7 +274,7 @@ class EvolveLoRATrainer(Trainer):
                 # Entropy floor
                 # ------------------------------------------------
 
-                entropy_losses.append(entropy_floor_loss(lambdas.float(), 0.35)
+                entropy_losses.append(entropy_floor_loss(router_probs.float(), 0.35)
                     
                 )
 
