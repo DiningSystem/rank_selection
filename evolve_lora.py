@@ -308,7 +308,7 @@ class EvolveLoRATrainer(Trainer):
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
-        loss = task_loss.float() + alpha_t * ent_loss  + \
+        loss = task_loss.float() + alpha_t * rank_reg  + \
             cfg.ortho_weight * orth_loss + cfg.beta * balance_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
