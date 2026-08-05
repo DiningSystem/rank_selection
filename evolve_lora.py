@@ -83,7 +83,7 @@ class SpectralLoRALayer(nn.Module):
         self.last_router_probs = lambdas.float()
         U = self.U
         V = self.V
-        lambdas = lambdas * self.r_max
+        #lambdas = lambdas * self.r_max
         self.last_lambdas = lambdas.float()
         dropped = self.dropout(adapter_input)
         spectral = (dropped @ V) * lambdas
