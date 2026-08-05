@@ -209,6 +209,7 @@ def create_peft_model_it_evolve_lora(model, args):
         anneal_k=args.evolve_anneal_k,
         complexity_ema=args.evolve_complexity_ema,
         router_hidden_dim=getattr(args, "evolve_router_hidden_dim", 64),
+        ortho_weight=args.ortho_weight,
     )
     return apply_evolve_lora(model, config), config
 
