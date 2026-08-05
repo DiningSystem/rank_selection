@@ -4,11 +4,11 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --model "meta-llama/Llama-3.2-1B" \
   --evolve_rank_delay_ratio 0 \
   --evolve_r_min 2 \
-  --evolve_beta 0 \
+  --evolve_beta 0.0003 \
   --evolve_alpha_max 0.0001 \
   --evolve_anneal_k 0 \
   --evolve_gate_floor 0 \
-  --ortho_weight 2e-4 \
+  --ortho_weight 1e-4 \
   --evolve_complexity_ema 0.9 \
   --evolve_router_hidden_dim 128 \
   --lora_r 32 \
