@@ -267,33 +267,6 @@ class EvolveLoRATrainer(Trainer):
         for module in model.modules():
             if isinstance(module, SpectralLoRALayer):
                 orth_losses.append(orthogonal_loss(module.U, module.V))
-                router_probs = (
-                module.last_router_probs
-                )
-                # ------------------------------------------------
-                # Entropy floor
-                # ------------------------------------------------
-
-                entropy_losses.append(entropy_floor_loss(router_probs.float(), 0.35)
-                    
-                )
-
-                # ------------------------------------------------
-                # Batch-level balancing
-                # ------------------------------------------------
-
-                balance_losses.append(
-                    expert_balance_loss(
-                        router_probs
-                    )
-                )
-        ent_loss = torch.stack(
-            entropy_losses
-        ).mean()
-
-        balance_loss = torch.stack(
-            balance_losses
-        ).mean()
 
         orth_loss = torch.stack(
             orth_losses
@@ -309,6 +282,6 @@ class EvolveLoRATrainer(Trainer):
         rank_reg = erank.mean()
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
         loss = task_loss.float() + alpha_t * rank_reg  + \
-            cfg.ortho_weight * orth_loss + cfg.beta * balance_loss
+            cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
         self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
         return (loss, outputs) if return_outputs else loss
