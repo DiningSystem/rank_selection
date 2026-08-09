@@ -191,6 +191,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--evolve_complexity_ema", type=float, default=0.9, help="EMA smoothing factor for entropy complexity")
     parser.add_argument("--evolve_router_hidden_dim", type=int, default=64, help="Hidden dimension for evolve-LoRA routers; keep small to avoid OOM on 7B/9B models")
+    parser.add_argument("--evolve_active_component_threshold", type=float, default=0.1, help="Lambda threshold above which a spectral LoRA component counts as active for wandb logging")
+    parser.add_argument("--evolve_active_log_max_layers", type=int, default=0, help="Maximum number of evolve-LoRA layers to log individually; 0 logs every layer")
     parser.add_argument("--evolve_no_detach_router", action="store_true", default=False, help="Allow router gradients through hidden states")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha value")
