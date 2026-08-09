@@ -6,4 +6,6 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --evolve_beta 0.05 \
   --evolve_alpha_max 0.01 \
   --evolve_anneal_k 5e-5 \
+  --evolve_active_component_threshold 0.1 \
+  --evolve_active_log_max_layers 0 \
   --hf_fast_download --hf_preload --hf_prefer_safetensors "$@"

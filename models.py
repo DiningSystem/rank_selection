@@ -210,6 +210,9 @@ def create_peft_model_it_evolve_lora(model, args):
         complexity_ema=args.evolve_complexity_ema,
         router_hidden_dim=getattr(args, "evolve_router_hidden_dim", 64),
         ortho_weight=args.ortho_weight,
+        active_component_threshold=args.evolve_active_component_threshold,
+        active_log_max_layers=args.evolve_active_log_max_layers,
+        active_log_seed=args.seed,
     )
     return apply_evolve_lora(model, config), config
 
