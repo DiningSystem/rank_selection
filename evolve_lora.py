@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-from transformers import Trainer
+from transformers import Trainer, TrainerCallback
 
 
 @dataclass
@@ -252,11 +252,23 @@ def rank_regularizer_weight(step, start_step, alpha_max=0.01):
     return alpha_max if step >= start_step else 0.0
 
 
+class EvolveLoRALogCallback(TrainerCallback):
+    def __init__(self, trainer):
+        self.trainer = trainer
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.trainer._flush_evolve_logs()
+        return control
+
+
 class EvolveLoRATrainer(Trainer):
     def __init__(self, *args, evolve_lora_config: Optional[EvolveLoRAConfig] = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.evolve_lora_config = evolve_lora_config or getattr(self.model, "evolve_lora_config", None)
         self._active_log_layer_names = None
+        self._pending_evolve_logs = None
+        self._pending_evolve_log_count = 0
+        self.add_callback(EvolveLoRALogCallback(self))
 
     def _sanitize_log_key(self, name):
         return name.replace(".", "/")
@@ -277,6 +289,25 @@ class EvolveLoRATrainer(Trainer):
 
         self._active_log_layer_names = set(layer_names)
         return self._active_log_layer_names
+
+    def _accumulate_evolve_logs(self, logs):
+        if not logs:
+            return
+        if self._pending_evolve_logs is None:
+            self._pending_evolve_logs = {key: float(value) for key, value in logs.items()}
+        else:
+            for key, value in logs.items():
+                self._pending_evolve_logs[key] = self._pending_evolve_logs.get(key, 0.0) + float(value)
+        self._pending_evolve_log_count += 1
+
+    def _flush_evolve_logs(self):
+        if not self._pending_evolve_logs or self._pending_evolve_log_count == 0:
+            return
+        count = self._pending_evolve_log_count
+        logs = {key: value / count for key, value in self._pending_evolve_logs.items()}
+        self._pending_evolve_logs = None
+        self._pending_evolve_log_count = 0
+        self.log(logs)
 
     def _collect_lambdas(self):
         vals = [m.last_lambdas.reshape(-1, m.r_max) for m in self.model.modules()
@@ -332,7 +363,8 @@ class EvolveLoRATrainer(Trainer):
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
         loss = task_loss.float() - alpha_t * rank_reg  + \
             cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
-        logs = {"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t}
-        logs.update(self._active_component_logs(model))
-        self.log(logs)
+        if model.training:
+            logs = {"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t}
+            logs.update(self._active_component_logs(model))
+            self._accumulate_evolve_logs(logs)
         return (loss, outputs) if return_outputs else loss
