@@ -64,9 +64,9 @@ class SpectralLoRALayer(nn.Module):
         self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
         
         self.router = nn.Sequential(
-            nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=self.adapter_dtype),
-            nn.GELU(),
-            nn.Linear(hidden_dim, r_max, device=adapter_device, dtype=self.adapter_dtype),
+            #nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=self.adapter_dtype),
+            #nn.GELU(),
+            nn.Linear(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype),
         )
         self.dropout = nn.Dropout(dropout)
         self.merged = False
@@ -231,7 +231,7 @@ def set_evolve_lora_state_dict(model, adapter_state_dict: Dict[str, torch.Tensor
 
 
 def effective_rank(lambdas):
-    probs = lambdas / (lambdas.sum(dim=-1, keepdim=True) + 1e-8)
+    probs = lambdas #/ (lambdas.sum(dim=-1, keepdim=True) + 1e-8)
     entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=-1)
     return torch.exp(entropy)
 
@@ -361,7 +361,7 @@ class EvolveLoRATrainer(Trainer):
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
-        loss = task_loss.float() + alpha_t * rank_reg  + \
+        loss = task_loss.float() - alpha_t * rank_reg  + \
             cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
         if model.training:
             logs = {"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t}
