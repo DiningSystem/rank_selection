@@ -2,11 +2,12 @@ import json
 import os
 import types
 from dataclasses import dataclass
+import random
 from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-from transformers import Trainer
+from transformers import Trainer, TrainerCallback
 
 
 @dataclass
@@ -27,6 +28,9 @@ class EvolveLoRAConfig:
     modules_to_save: Optional[List[str]] = None
     router_hidden_dim: int = 64
     ortho_weight: float = 1e-4
+    active_component_threshold: float = 0.1
+    active_log_max_layers: int = 0
+    active_log_seed: int = 42
 
     def __post_init__(self):
         if self.target_modules is None:
@@ -248,15 +252,91 @@ def rank_regularizer_weight(step, start_step, alpha_max=0.01):
     return alpha_max if step >= start_step else 0.0
 
 
+class EvolveLoRALogCallback(TrainerCallback):
+    def __init__(self, trainer):
+        self.trainer = trainer
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.trainer._flush_evolve_logs()
+        return control
+
+
 class EvolveLoRATrainer(Trainer):
     def __init__(self, *args, evolve_lora_config: Optional[EvolveLoRAConfig] = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.evolve_lora_config = evolve_lora_config or getattr(self.model, "evolve_lora_config", None)
+        self._active_log_layer_names = None
+        self._pending_evolve_logs = None
+        self._pending_evolve_log_count = 0
+        self.add_callback(EvolveLoRALogCallback(self))
+
+    def _sanitize_log_key(self, name):
+        return name.replace(".", "/")
+
+    def _get_active_log_layer_names(self, model):
+        if self._active_log_layer_names is not None:
+            return self._active_log_layer_names
+
+        layer_names = [
+            name for name, module in model.named_modules()
+            if isinstance(module, SpectralLoRALayer)
+        ]
+        cfg = self.evolve_lora_config
+        max_layers = getattr(cfg, "active_log_max_layers", 0) if cfg is not None else 0
+        if max_layers and max_layers > 0 and len(layer_names) > max_layers:
+            rng = random.Random(getattr(cfg, "active_log_seed", 42))
+            layer_names = sorted(rng.sample(layer_names, max_layers))
+
+        self._active_log_layer_names = set(layer_names)
+        return self._active_log_layer_names
+
+    def _accumulate_evolve_logs(self, logs):
+        if not logs:
+            return
+        if self._pending_evolve_logs is None:
+            self._pending_evolve_logs = {key: float(value) for key, value in logs.items()}
+        else:
+            for key, value in logs.items():
+                self._pending_evolve_logs[key] = self._pending_evolve_logs.get(key, 0.0) + float(value)
+        self._pending_evolve_log_count += 1
+
+    def _flush_evolve_logs(self):
+        if not self._pending_evolve_logs or self._pending_evolve_log_count == 0:
+            return
+        count = self._pending_evolve_log_count
+        logs = {key: value / count for key, value in self._pending_evolve_logs.items()}
+        self._pending_evolve_logs = None
+        self._pending_evolve_log_count = 0
+        self.log(logs)
 
     def _collect_lambdas(self):
         vals = [m.last_lambdas.reshape(-1, m.r_max) for m in self.model.modules()
                 if isinstance(m, SpectralLoRALayer) and m.last_lambdas is not None]
         return torch.cat(vals, dim=0) if vals else None
+
+    def _active_component_logs(self, model):
+        cfg = self.evolve_lora_config
+        if cfg is None:
+            return {}
+
+        threshold = getattr(cfg, "active_component_threshold", 0.1)
+        selected_layers = self._get_active_log_layer_names(model)
+        logs = {}
+        layer_active_counts = []
+        for name, module in model.named_modules():
+            if not isinstance(module, SpectralLoRALayer) or module.last_lambdas is None:
+                continue
+
+            active_counts = (module.last_lambdas.float() > threshold).sum(dim=-1).float()
+            mean_active = active_counts.mean().detach()
+            layer_active_counts.append(mean_active)
+            if name in selected_layers:
+                logs[f"evolve/active_components/{self._sanitize_log_key(name)}"] = mean_active.item()
+
+        if layer_active_counts:
+            logs["evolve/active_components_mean"] = torch.stack(layer_active_counts).mean().item()
+            logs["evolve/active_component_threshold"] = float(threshold)
+        return logs
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         outputs = model(**inputs)
@@ -283,5 +363,8 @@ class EvolveLoRATrainer(Trainer):
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
         loss = task_loss.float() + alpha_t * rank_reg  + \
             cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
-        self.log({"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t})
+        if model.training:
+            logs = {"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t}
+            logs.update(self._active_component_logs(model))
+            self._accumulate_evolve_logs(logs)
         return (loss, outputs) if return_outputs else loss
