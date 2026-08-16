@@ -5,10 +5,10 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --evolve_rank_delay_ratio 0 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.00005 \
+  --evolve_alpha_max 0.00006 \
   --evolve_anneal_k 0 \
   --evolve_gate_floor 0 \
-  --ortho_weight 6.5e-5 \
+  --ortho_weight 7e-5 \
   --evolve_complexity_ema 0.9 \
   --evolve_router_hidden_dim 128 \
   --evolve_active_component_threshold 0.001 \
