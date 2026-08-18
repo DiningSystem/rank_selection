@@ -8,14 +8,14 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --evolve_rank_delay_ratio 0 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 0.00007 \
+  --evolve_alpha_max 5e-5 \
   --evolve_anneal_k 0 \
   --evolve_gate_floor 0 \
-  --ortho_weight 7e-5 \
+  --ortho_weight 6.5e-5 \
   --evolve_active_component_threshold 0.01 \
   --evolve_active_log_max_layers 6 \
-  --lora_r 32 \
-  --lora_alpha 32 \
+  --lora_r 22 \
+  --lora_alpha 44 \
   --lora_dropout 0 \
   --batch_size 1 \
   --grad_acc_steps 32 \
