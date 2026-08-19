@@ -5,18 +5,35 @@ MODEL="meta-llama/Llama-3.2-3B"
 GPU_ID=0  # Specify which GPU to use
 
 # List of run directories to process; add trained adapter directories here
-RUN_DIRS=("/home/gdi-user/enguyen/research_vllm/test/rank_selection/experiments/commonsense_reasoning/Llama-3.2-3B/20260330_034838_rank_32_lr0.001")
+RUN_DIRS=()
+
+if [ "$#" -gt 0 ]; then
+    RUN_DIRS=("$@")
+fi
+
+if [ "${#RUN_DIRS[@]}" -eq 0 ]; then
+    echo "Error: No run directories provided."
+    echo "Provide one or more run dirs as args, e.g.:"
+    echo "  bash scripts/cr_merge_eval.sh /abs/path/to/run_dir"
+    exit 1
+fi
 
 # Process each run directory
-for RUN_DIR in "${RUN_DIRS[@]}"; do
+for RAW_RUN_DIR in "${RUN_DIRS[@]}"; do
+    RUN_DIR="$(printf '%s' "$RAW_RUN_DIR" | sed 's/\r$//')"
+    RUN_DIR="${RUN_DIR%/}"
     echo "=== Processing: $RUN_DIR ==="
     
     # Extract method from the directory structure (one folder above run directory)
     METHOD=$(basename "$(dirname "$RUN_DIR")")
     echo "Extracted method: $METHOD"
     
-    # Get the final and merged model paths
-    FINAL_MODEL_PATH="$RUN_DIR/final_model"
+    # Get the final and merged model paths. Accept either a run directory or final_model directly.
+    if [ "$(basename "$RUN_DIR")" = "final_model" ]; then
+        FINAL_MODEL_PATH="$RUN_DIR"
+    else
+        FINAL_MODEL_PATH="$RUN_DIR/final_model"
+    fi
     MERGED_MODEL_PATH="$RUN_DIR/merged_model"
     
     echo "=== Starting Merging ==="
