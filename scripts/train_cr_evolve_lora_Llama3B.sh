@@ -12,8 +12,8 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --ortho_weight 1e-4 \
   --evolve_active_component_threshold 0.01 \
   --evolve_active_log_max_layers 6 \
-  --lora_r 22 \
-  --lora_alpha 44 \
+  --lora_r 21 \
+  --lora_alpha 42 \
   --lora_dropout 0.05 \
   --batch_size 6 \
   --grad_acc_steps 24 \
