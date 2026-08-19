@@ -24,6 +24,7 @@ import wandb
 from utils.data_utils import *
 from models import *
 from evolve_lora import EvolveLoRATrainer
+from sora import SoRATrainer
 from utils.misc import *
 
 
@@ -84,10 +85,7 @@ def finetune():
     data_module = dict(train_dataset=train_dataset, data_collator=data_collator)
     
 
-    if args.adapter_type == "evolve_lora":
-        model, adapter_config = create_peft_model_it_evolve_lora(model, args)
-    else:
-        model, adapter_config = create_peft_model_it_abba(model, args)
+    model, adapter_config = create_adapter_model_it(model, args)
 
     param_counts = count_parameters(model, verbose=False)
 
@@ -98,7 +96,8 @@ def finetune():
     wandb.log({"total_params": total_params, "classifier_params": classifier_params, "non_classifier_params": non_classifier_params})
 
     # Setup optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    optimizer_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.endswith(".gate")]
+    optimizer = torch.optim.AdamW(optimizer_params, lr=args.lr)
     
     # Training arguments
     training_args = TrainingArguments(
@@ -127,8 +126,15 @@ def finetune():
     with open(training_args_path, 'w') as f:
         json.dump(training_args.to_dict(), f, indent=4)
     
-    trainer_cls = EvolveLoRATrainer if args.adapter_type == "evolve_lora" else Trainer
-    trainer_kwargs = {"evolve_lora_config": adapter_config} if args.adapter_type == "evolve_lora" else {}
+    if args.adapter_type == "evolve_lora":
+        trainer_cls = EvolveLoRATrainer
+        trainer_kwargs = {"evolve_lora_config": adapter_config}
+    elif args.adapter_type == "sora":
+        trainer_cls = SoRATrainer
+        trainer_kwargs = {"sora_config": adapter_config}
+    else:
+        trainer_cls = Trainer
+        trainer_kwargs = {}
     trainer = trainer_cls(
         model=model,
         args=training_args,
@@ -178,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("--hf_parallel_loading_workers", type=int, default=8, help="Number of workers for parallel HF loading")
     parser.add_argument("--hf_prefer_safetensors", action="store_true", help="Prefer safetensors and skip .bin/.pth files during preload when possible")
     parser.add_argument("--hf_local_files_only", action="store_true", help="Load model/tokenizer only from local cache (no network)")
-    parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora"], help="Adapter implementation to train")
+    parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora", "lora", "adalora", "sora"], help="Adapter implementation to train")
     parser.add_argument("--evolve_rank_delay_ratio", type=float, default=0.15, help="Delay rank ratio before training")
     parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
     parser.add_argument("--evolve_beta", type=float, default=0.05, help="Information-conditioned rank consistency weight")
@@ -192,6 +198,12 @@ if __name__ == "__main__":
     parser.add_argument("--evolve_active_component_threshold", type=float, default=0.1, help="Lambda threshold above which a spectral LoRA component counts as active for wandb logging")
     parser.add_argument("--evolve_active_log_max_layers", type=int, default=0, help="Maximum number of evolve-LoRA layers to log individually; 0 logs every layer")
     parser.add_argument("--evolve_no_detach_router", action="store_true", help="Allow router gradients through hidden states")
+    parser.add_argument("--sora_gate_lr", type=float, default=0.1, help="SoRA proximal gate learning rate")
+    parser.add_argument("--sora_lambda_sparsity", type=float, default=0.1, help="SoRA L1 proximal sparsity coefficient")
+    parser.add_argument("--adalora_target_r", type=int, default=4, help="AdaLoRA target rank")
+    parser.add_argument("--adalora_tinit", type=int, default=200, help="AdaLoRA warmup steps before rank allocation")
+    parser.add_argument("--adalora_tfinal", type=int, default=1000, help="AdaLoRA final rank-allocation step")
+    parser.add_argument("--adalora_deltaT", type=int, default=10, help="AdaLoRA rank-allocation update interval")
     parser.add_argument("--lora_r", type=int, default=32, help="LoRA R value (assigns half of this to each adapter)")
     parser.add_argument("--lora_alpha", type=int, default=16, help="LoRA alpha value")
     parser.add_argument("--lora_dropout", type=float, default=0, help="LoRA dropout value")

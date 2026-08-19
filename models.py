@@ -192,6 +192,7 @@ def create_peft_model_cr_abba(model, args):
 
 # evolve-LoRA helpers are kept separate from ABBA so existing ABBA code paths remain unchanged.
 from evolve_lora import EvolveLoRAConfig, apply_evolve_lora
+from sora import SoRAConfig, apply_sora
 
 
 def create_peft_model_it_evolve_lora(model, args):
@@ -219,3 +220,81 @@ def create_peft_model_it_evolve_lora(model, args):
 
 def create_peft_model_cr_evolve_lora(model, args):
     return create_peft_model_it_evolve_lora(model, args)
+
+
+def _target_modules():
+    return ["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"]
+
+def create_peft_model_it_lora(model, args):
+    config = LoraConfig(
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        bias="none",
+        task_type=TaskType.CAUSAL_LM,
+        target_modules=_target_modules(),
+    )
+    return get_peft_model(model, config), config
+
+def create_peft_model_cr_lora(model, args):
+    return create_peft_model_it_lora(model, args)
+
+def create_peft_model_it_adalora(model, args):
+    config = AdaLoraConfig(
+        init_r=args.lora_r,
+        target_r=getattr(args, "adalora_target_r", max(1, args.lora_r // 2)),
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        beta1=getattr(args, "adalora_beta1", 0.85),
+        beta2=getattr(args, "adalora_beta2", 0.85),
+        tinit=getattr(args, "adalora_tinit", 200),
+        tfinal=getattr(args, "adalora_tfinal", 1000),
+        deltaT=getattr(args, "adalora_deltaT", 10),
+        bias="none",
+        task_type=TaskType.CAUSAL_LM,
+        target_modules=_target_modules(),
+    )
+    return get_peft_model(model, config), config
+
+def create_peft_model_cr_adalora(model, args):
+    return create_peft_model_it_adalora(model, args)
+
+def create_peft_model_it_sora(model, args):
+    config = SoRAConfig(
+        rmax=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        target_modules=_target_modules(),
+        gate_lr=getattr(args, "sora_gate_lr", 0.1),
+        lambda_sparsity=getattr(args, "sora_lambda_sparsity", 0.1),
+    )
+    return apply_sora(model, config), config
+
+def create_peft_model_cr_sora(model, args):
+    return create_peft_model_it_sora(model, args)
+
+def create_adapter_model_it(model, args):
+    if args.adapter_type == "evolve_lora":
+        return create_peft_model_it_evolve_lora(model, args)
+    if args.adapter_type == "abba":
+        return create_peft_model_it_abba(model, args)
+    if args.adapter_type == "lora":
+        return create_peft_model_it_lora(model, args)
+    if args.adapter_type == "adalora":
+        return create_peft_model_it_adalora(model, args)
+    if args.adapter_type == "sora":
+        return create_peft_model_it_sora(model, args)
+    raise ValueError(f"Unsupported adapter_type: {args.adapter_type}")
+
+def create_adapter_model_cr(model, args):
+    if args.adapter_type == "evolve_lora":
+        return create_peft_model_cr_evolve_lora(model, args)
+    if args.adapter_type == "abba":
+        return create_peft_model_cr_abba(model, args)
+    if args.adapter_type == "lora":
+        return create_peft_model_cr_lora(model, args)
+    if args.adapter_type == "adalora":
+        return create_peft_model_cr_adalora(model, args)
+    if args.adapter_type == "sora":
+        return create_peft_model_cr_sora(model, args)
+    raise ValueError(f"Unsupported adapter_type: {args.adapter_type}")
