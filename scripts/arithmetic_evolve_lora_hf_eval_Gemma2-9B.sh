@@ -47,7 +47,8 @@ for RAW_RUN_DIR in "$@"; do
     --max_new_tokens "$GSM8K_MAX_NEW_TOKENS" \
     --torch_dtype "$TORCH_DTYPE" \
     --device_map "$DEVICE_MAP" \
-    --run_dir "$LOG_RUN_DIR"
+    --run_dir "$LOG_RUN_DIR" \
+    --seed 10
 
   CUDA_VISIBLE_DEVICES="$GPU_ID" python instruction_tuning_eval/arithmetic_eval_hf_evolve_lora.py \
     --base_model "$MODEL" \
@@ -58,7 +59,8 @@ for RAW_RUN_DIR in "$@"; do
     --max_new_tokens "$MATH_MAX_NEW_TOKENS" \
     --torch_dtype "$TORCH_DTYPE" \
     --device_map "$DEVICE_MAP" \
-    --run_dir "$LOG_RUN_DIR"
+    --run_dir "$LOG_RUN_DIR" \
+    --seed 10
 
   cat <<EOF > "$LOG_RUN_DIR/evolve_lora_hf_arithmetic_eval_info.txt"
 Run processed at: $(date)
