@@ -214,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_ratio", type=float, default=0.02, help="Warmup ratio")
     parser.add_argument("--max_seq_length", type=int, default=512, help="Maximum sequence length")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--seed", type=int, default=10, help="Random seed")
     parser.add_argument("--gradient_checkpointing", action=argparse.BooleanOptionalAction, default=True, help="Enable gradient checkpointing to reduce activation memory")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
         
