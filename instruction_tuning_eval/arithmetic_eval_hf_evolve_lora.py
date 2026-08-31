@@ -97,7 +97,7 @@ def load_evolve_lora_for_hf(
     base_model,
     adapter_path,
     torch_dtype="bfloat16",
-    device="cuda:0",
+    device="cuda",
 ):
     """
     Load a HuggingFace causal LM + EvolveLoRA adapter.
