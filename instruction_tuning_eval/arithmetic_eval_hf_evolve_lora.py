@@ -191,7 +191,7 @@ def load_evolve_lora_for_hf(
     # and have received their checkpoint weights.
     # ---------------------------------------------------------
     model = model.to(
-        device=device,
+        device="cuda:0",
         dtype=dtype,
     )
 
