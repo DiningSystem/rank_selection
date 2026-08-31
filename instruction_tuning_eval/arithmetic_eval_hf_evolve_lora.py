@@ -86,21 +86,120 @@ def batch_data(data_list, batch_size=1):
     return [data_list[i:i + batch_size] for i in range(0, len(data_list), batch_size)]
 
 
-def load_evolve_lora_for_hf(base_model, adapter_path, torch_dtype="bfloat16", device_map="auto"):
+import json
+import os
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+def load_evolve_lora_for_hf(
+    base_model,
+    adapter_path,
+    torch_dtype="bfloat16",
+    device="cuda:0",
+):
+    """
+    Load a HuggingFace causal LM + EvolveLoRA adapter.
+
+    Important:
+        - Do NOT use device_map="auto" here.
+        - Apply EvolveLoRA while the model is still on CPU.
+        - Load the adapter weights while everything is on CPU.
+        - Move the complete model to CUDA only at the end.
+    """
+
+    # ---------------------------------------------------------
+    # 1. Resolve dtype
+    # ---------------------------------------------------------
     dtype = getattr(torch, torch_dtype)
-    model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=dtype, device_map=device_map)
-    tokenizer = AutoTokenizer.from_pretrained(base_model, use_fast=True)
+
+    # ---------------------------------------------------------
+    # 2. Load base HuggingFace model on CPU
+    # ---------------------------------------------------------
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model,
+        torch_dtype=dtype,
+        device_map=None,
+    )
+
+    # ---------------------------------------------------------
+    # 3. Load tokenizer
+    # ---------------------------------------------------------
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_model,
+        use_fast=True,
+    )
+
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
+
     tokenizer.padding_side = "left"
     tokenizer.truncation_side = "left"
 
-    with open(os.path.join(adapter_path, "adapter_config.json"), "r") as f:
-        config = EvolveLoRAConfig(**json.load(f))
-    model = apply_evolve_lora(model, config)
-    state = torch.load(os.path.join(adapter_path, "adapter_model.bin"), map_location="cpu")
-    set_evolve_lora_state_dict(model, state)
+    # ---------------------------------------------------------
+    # 4. Load EvolveLoRA configuration
+    # ---------------------------------------------------------
+    config_path = os.path.join(
+        adapter_path,
+        "adapter_config.json",
+    )
+
+    with open(config_path, "r") as f:
+        config_dict = json.load(f)
+
+    config = EvolveLoRAConfig(**config_dict)
+
+    # ---------------------------------------------------------
+    # 5. Apply EvolveLoRA
+    #
+    # Everything is still on CPU here, so newly-created
+    # LoRA parameters will also be created on CPU.
+    # ---------------------------------------------------------
+    model = apply_evolve_lora(
+        model,
+        config,
+    )
+
+    # ---------------------------------------------------------
+    # 6. Load EvolveLoRA checkpoint
+    # ---------------------------------------------------------
+    adapter_path_bin = os.path.join(
+        adapter_path,
+        "adapter_model.bin",
+    )
+
+    state = torch.load(
+        adapter_path_bin,
+        map_location="cpu",
+    )
+
+    # ---------------------------------------------------------
+    # 7. Load adapter weights
+    #
+    # The model and state dict are both on CPU at this point.
+    # ---------------------------------------------------------
+    set_evolve_lora_state_dict(
+        model,
+        state,
+    )
+
+    # ---------------------------------------------------------
+    # 8. Move the COMPLETE model to GPU
+    #
+    # This happens only after all EvolveLoRA parameters exist
+    # and have received their checkpoint weights.
+    # ---------------------------------------------------------
+    model = model.to(
+        device=device,
+        dtype=dtype,
+    )
+
+    # ---------------------------------------------------------
+    # 9. Evaluation mode
+    # ---------------------------------------------------------
     model.eval()
+
     return model, tokenizer
 
 
