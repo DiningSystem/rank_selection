@@ -200,7 +200,7 @@ def parse_args():
     parser.add_argument("--device_map", type=str, default="auto")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--run_dir", type=str)
-    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--temperature", type=float, default=0.1)
     parser.add_argument("--top_p", type=float, default=1.0)
     args = parser.parse_args()
     if args.data_file is None:
