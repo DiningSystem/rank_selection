@@ -24,5 +24,5 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --scheduler cosine \
   --warmup_ratio 0.02 \
   --max_seq_length 512 \
-  --seed 100 \
+  --seed 50 \
   --lr 1e-3
