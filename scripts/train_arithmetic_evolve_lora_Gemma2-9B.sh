@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --evolve_rank_delay_ratio 0 \
   --evolve_r_min 2 \
   --evolve_beta 0 \
-  --evolve_alpha_max 1e-2 \
+  --evolve_alpha_max 5e-3 \
   --evolve_anneal_k 0 \
   --evolve_gate_floor 0 \
   --ortho_weight 0 \
@@ -23,4 +23,5 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_arithmetic.py \
   --scheduler cosine \
   --warmup_ratio 0.02 \
   --max_seq_length 512 \
+  --seed 100 \
   --lr 1e-3
