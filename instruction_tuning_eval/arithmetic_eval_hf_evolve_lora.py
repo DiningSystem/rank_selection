@@ -125,7 +125,7 @@ def load_arithmetic_dataset(task, data_path, start=0, end=MAX_INT):
 
 
 def arithmetic_test_hf(base_model, adapter_path, task, data_path, start=0, end=MAX_INT, batch_size=1,
-                       max_new_tokens=512, torch_dtype="bfloat16", device_map="auto", seed=42):
+                       max_new_tokens=512, torch_dtype="bfloat16", device_map="auto", seed=42, temperature=0, top_p=1.0):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
@@ -152,7 +152,9 @@ def arithmetic_test_hf(base_model, adapter_path, task, data_path, start=0, end=M
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                do_sample=False,
+                do_sample=True,
+                temperature=temperature,
+                top_p=top_p,
                 max_new_tokens=max_new_tokens,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id,
@@ -197,6 +199,8 @@ def parse_args():
     parser.add_argument("--device_map", type=str, default="auto")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--run_dir", type=str)
+    parser.add_argument("--temperature", type=float, default=0)
+    parser.add_argument("--top_p", type=float, default=1.0)
     args = parser.parse_args()
     if args.data_file is None:
         args.data_file = "data/math_eval/gsm8k_test.jsonl" if args.task == "gsm8k" else "data/math_eval/MATH_test.jsonl"
@@ -226,4 +230,6 @@ if __name__ == "__main__":
         torch_dtype=args.torch_dtype,
         device_map=args.device_map,
         seed=args.seed,
+        temperature=args.temperature,
+        top_p=args.top_p
     )
