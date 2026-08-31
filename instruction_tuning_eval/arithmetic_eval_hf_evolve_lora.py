@@ -296,7 +296,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--max_new_tokens", type=int, default=512)
     parser.add_argument("--torch_dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
-    parser.add_argument("--device_map", type=str, default="auto")
+    parser.add_argument("--device_map", type=str, default="cuda")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--run_dir", type=str)
     parser.add_argument("--temperature", type=float, default=0.1)
