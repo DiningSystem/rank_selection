@@ -48,7 +48,7 @@ for RAW_RUN_DIR in "$@"; do
     --torch_dtype "$TORCH_DTYPE" \
     --device_map "$DEVICE_MAP" \
     --run_dir "$LOG_RUN_DIR" \
-    --seed 10
+    --seed 150
 
   CUDA_VISIBLE_DEVICES="$GPU_ID" python instruction_tuning_eval/arithmetic_eval_hf_evolve_lora.py \
     --base_model "$MODEL" \
@@ -60,7 +60,7 @@ for RAW_RUN_DIR in "$@"; do
     --torch_dtype "$TORCH_DTYPE" \
     --device_map "$DEVICE_MAP" \
     --run_dir "$LOG_RUN_DIR" \
-    --seed 10
+    --seed 150
 
   cat <<EOF > "$LOG_RUN_DIR/evolve_lora_hf_arithmetic_eval_info.txt"
 Run processed at: $(date)
