@@ -344,13 +344,13 @@ class EvolveLoRATrainer(Trainer):
         entropy_losses = []
         balance_losses = []
 
-        for module in model.modules():
-            if isinstance(module, SpectralLoRALayer):
-                orth_losses.append(orthogonal_loss(module.U, module.V))
+        # for module in model.modules():
+        #     if isinstance(module, SpectralLoRALayer):
+        #         orth_losses.append(orthogonal_loss(module.U, module.V))
 
-        orth_loss = torch.stack(
-            orth_losses
-        ).mean()
+        # orth_loss = torch.stack(
+        #     orth_losses
+        # ).mean()
         task_loss = outputs.loss
         cfg = self.evolve_lora_config
         lambdas = self._collect_lambdas()
@@ -361,10 +361,10 @@ class EvolveLoRATrainer(Trainer):
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
-        loss = task_loss.float() - alpha_t * rank_reg  + \
-            cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
+        loss = task_loss.float() - alpha_t * ((rank_reg - 1)/(cfg.r_max - 1))   #+ \
+            #cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
         if model.training:
-            logs = {"evolve/erank": rank_reg.detach().item(), "evolve/alpha": alpha_t}
+            logs = {"evolve/erank": rank_reg.detach().item(), "loss": task_loss.float(), "total_loss": loss}
             logs.update(self._active_component_logs(model))
             self._accumulate_evolve_logs(logs)
         return (loss, outputs) if return_outputs else loss
