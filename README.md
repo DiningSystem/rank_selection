@@ -4,7 +4,7 @@ Code for efficient fine-tuning experiments with **input-conditioned spectral LoR
 
 > **Branch:** `evolve_rank`
 >
-> The `evolve_rank` branch contains the current evolve-LoRA implementation and training/inference utilities described below.
+> The `evolve_rank` branch contains the current evolve-LoRA implementation and model-specific training/evaluation utilities described below.
 
 ## Overview
 
@@ -32,13 +32,19 @@ Important files for evolve-LoRA:
 
 ```text
 evolve_lora.py                 # Evolve-LoRA module, router, rank metrics, Trainer
-train_arithmetic.py             # Training entrypoint
+train_arithmetic.py             # Arithmetic training entrypoint
+train_cr.py                     # Commonsense reasoning training entrypoint
 inference_evolve_lora.py        # Hugging Face / vLLM inference entrypoint
 scripts/
   train_arithmetic_evolve_lora.sh
+  train_arithmetic_evolve_lora_Mistral7B.sh
+  train_arithmetic_evolve_lora_Gemma2-9B.sh
+  train_cr_evolve_lora_Llama1B.sh
+  train_cr_evolve_lora_Llama3B.sh
+  arithmetic_evolve_lora_hf_eval_Mistral7B.sh
+  arithmetic_evolve_lora_hf_eval_Gemma2-9B.sh
+  cr_evolve_lora_hf_eval.sh
   infer_evolve_lora_hf.sh
-  arithmetic_merge_eval.sh
-  cr_merge_eval.sh
 ```
 
 The repository also contains the original ABBA implementation and the existing arithmetic/commonsense evaluation pipelines.
@@ -121,11 +127,94 @@ The current `evolve_rank` implementation uses the **task loss only** for optimiz
 
 The rank, entropy, balance, and orthogonality utilities remain available in `evolve_lora.py` for experimentation, but the corresponding regularization terms are currently disabled in `EvolveLoRATrainer.compute_loss`. The reported effective rank and active-component statistics are monitoring metrics rather than optimization losses.
 
-## Arithmetic reasoning
+## Experiments
 
-### Training
+The evolve-LoRA experiments are organized by model. **Each model has its own training launcher and its own evaluation launcher, except Llama 3.2 1B and Llama 3.2 3B, which share the same commonsense HF evaluation script.**
 
-The provided arithmetic wrapper launches `train_arithmetic.py` with `--adapter_type evolve_lora`:
+| Model | Task | Training script | Evaluation script |
+|---|---|---|---|
+| Mistral 7B | Arithmetic | `scripts/train_arithmetic_evolve_lora_Mistral7B.sh` | `scripts/arithmetic_evolve_lora_hf_eval_Mistral7B.sh` |
+| Gemma 2 9B | Arithmetic | `scripts/train_arithmetic_evolve_lora_Gemma2-9B.sh` | `scripts/arithmetic_evolve_lora_hf_eval_Gemma2-9B.sh` |
+| Llama 3.2 1B | Commonsense | `scripts/train_cr_evolve_lora_Llama1B.sh` | `scripts/cr_evolve_lora_hf_eval.sh` |
+| Llama 3.2 3B | Commonsense | `scripts/train_cr_evolve_lora_Llama3B.sh` | `scripts/cr_evolve_lora_hf_eval.sh` |
+
+### Mistral 7B — arithmetic
+
+Training uses the model-specific launcher:
+
+```bash
+bash scripts/train_arithmetic_evolve_lora_Mistral7B.sh
+```
+
+The launcher is configured for `mistralai/Mistral-7B-v0.1`, with maximum rank 22, `lora_alpha=44`, task-only optimization, and the evolve-LoRA settings used for the Mistral experiment. Additional arguments are forwarded to `train_arithmetic.py`.
+
+Evaluate the saved adapter directly with Hugging Face:
+
+```bash
+bash scripts/arithmetic_evolve_lora_hf_eval_Mistral7B.sh \\
+  /path/to/run
+```
+
+This evaluates GSM8K and MATH without attempting to merge the input-conditioned adapter.
+
+### Gemma 2 9B — arithmetic
+
+Training uses the dedicated Gemma launcher:
+
+```bash
+bash scripts/train_arithmetic_evolve_lora_Gemma2-9B.sh
+```
+
+The launcher is configured for `google/gemma-2-9b`, with maximum rank 22, `lora_alpha=44`, task-only optimization, and the evolve-LoRA settings used for the Gemma experiment. Additional arguments are forwarded to `train_arithmetic.py`.
+
+Evaluate with:
+
+```bash
+bash scripts/arithmetic_evolve_lora_hf_eval_Gemma2-9B.sh \\
+  /path/to/run
+```
+
+This evaluates GSM8K and MATH using Hugging Face adapter inference.
+
+### Llama 3.2 1B — commonsense reasoning
+
+Training uses the dedicated Llama 1B launcher:
+
+```bash
+bash scripts/train_cr_evolve_lora_Llama1B.sh
+```
+
+The launcher uses `meta-llama/Llama-3.2-1B` and the evolve-LoRA configuration for the 1B commonsense experiment.
+
+Llama 1B and Llama 3B use the **same evaluation script**. Select the model through the `MODEL` environment variable:
+
+```bash
+MODEL=meta-llama/Llama-3.2-1B \\
+  bash scripts/cr_evolve_lora_hf_eval.sh /path/to/run
+```
+
+The evaluation covers ARC-Challenge, ARC-Easy, BoolQ, HellaSwag, OpenBookQA, PIQA, Social IQa, and WinoGrande.
+
+### Llama 3.2 3B — commonsense reasoning
+
+Training uses the dedicated Llama 3B launcher:
+
+```bash
+bash scripts/train_cr_evolve_lora_Llama3B.sh
+```
+
+The launcher uses `meta-llama/Llama-3.2-3B` and the evolve-LoRA configuration for the 3B commonsense experiment.
+
+The same shared evaluation launcher is used for Llama 3B:
+
+```bash
+MODEL=meta-llama/Llama-3.2-3B \\
+  bash scripts/cr_evolve_lora_hf_eval.sh /path/to/run
+```
+
+### Generic arithmetic launcher
+
+A generic arithmetic wrapper is also available when you want to override the model/configuration from the command line:
 
 ```bash
 bash scripts/train_arithmetic_evolve_lora.sh \\
@@ -133,52 +222,7 @@ bash scripts/train_arithmetic_evolve_lora.sh \\
   --dataset_split 'train[:50000]'
 ```
 
-The current wrapper uses:
-
-```text
-lora_r = 32
-lora_alpha = 16
-evolve_r_min = 2
-evolve_beta = 0.05
-evolve_alpha_max = 0.01
-evolve_anneal_k = 5e-5
-evolve_active_component_threshold = 0.1
-```
-
-These values are wrapper defaults; all evolve-LoRA arguments can also be overridden from the command line.
-
-Training outputs are written under:
-
-```text
-experiments/arithmetic/<model>/<run>/
-├── checkpoints/
-├── logs/
-├── tokenizer/
-├── config.json
-├── training_args.json
-├── wandb_run_id.txt
-└── final_model/
-```
-
-The `final_model` directory contains the saved evolve-LoRA adapter configuration and adapter weights.
-
-### Arithmetic evaluation
-
-For the standard merged-model arithmetic evaluation pipeline:
-
-```bash
-bash scripts/arithmetic_merge_eval.sh /abs/path/to/run_dir
-```
-
-The script accepts either a run directory or a direct `final_model` path. Multiple runs can be evaluated in one invocation:
-
-```bash
-bash scripts/arithmetic_merge_eval.sh \\
-  /abs/path/to/run1 \\
-  /abs/path/to/run2
-```
-
-**Important:** raw evolve-LoRA adapters are input-conditioned and cannot be exactly merged into static base-model weights. Use the HF inference/evaluation path below for evolve-LoRA adapters.
+For reproducible model-specific experiments, prefer the dedicated launchers in the table above.
 
 ## Evolve-LoRA inference
 
@@ -240,27 +284,6 @@ python inference_evolve_lora.py \\
 ```
 
 Do not pass `--adapter_path` with `--backend vllm`.
-
-## Commonsense reasoning
-
-The repository contains the existing Commonsense170K training and evaluation pipeline. The standard commonsense evaluation covers:
-
-- ARC-Challenge
-- ARC-Easy
-- BoolQ
-- HellaSwag
-- OpenBookQA
-- PIQA
-- Social IQa
-- WinoGrande
-
-The standard evaluation script is:
-
-```bash
-bash scripts/cr_merge_eval.sh
-```
-
-Use the files and scripts present in this branch for the exact commonsense training/evaluation configuration. In particular, do not assume that a dedicated `train_cr_evolve_lora.sh` wrapper exists unless it is present in the checkout.
 
 ## Command-line options
 
