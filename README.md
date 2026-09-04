@@ -22,11 +22,10 @@ $$
 \lambda(x) = \mathrm{softmax}(R(x)).
 $$
 
-In the current model-specific experiments, `evolve_gate_floor=0`, so there is **no gate floor or additive offset**. The router is simply `softmax(R(x))` over the `r_max` spectral components.
+In the current model-specific experiments, the router is simply `softmax(R(x))` over the `r_max` spectral components.
 
 The adapter is therefore dynamic at inference time and cannot be exactly merged into a single static weight matrix.
 
-![intro-fig](assets/abba_github.jpg)
 
 ## Repository structure
 
