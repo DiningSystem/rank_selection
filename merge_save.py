@@ -3,8 +3,10 @@ import json
 import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 
 from abba import ABBAConfig, apply_abba, set_adapter_state_dict as set_abba_adapter_state_dict
+from sora import SoRAConfig, apply_sora, set_sora_state_dict
 
 
 def load_and_merge_adapter(base_model_name, adapter_path, output_path):
@@ -34,16 +36,19 @@ def load_and_merge_adapter(base_model_name, adapter_path, output_path):
     with open(os.path.join(adapter_path, "adapter_config.json"), "r") as f:
         config_dict = json.load(f)
     
-    config = ABBAConfig(**config_dict)
-    
-    # Apply adapter to the model
-    model = apply_abba(base_model, config, adapter_name=adapter_name)
-    
-    # Load the adapter weights
-    adapter_state_dict = torch.load(os.path.join(adapter_path, "adapter_model.bin"), map_location=torch.device("cuda"))
-    set_abba_adapter_state_dict(model, adapter_state_dict, adapter_name)
+    if "peft_type" in config_dict:
+        model = PeftModel.from_pretrained(base_model, adapter_path)
+    elif "rmax" in config_dict:
+        config = SoRAConfig(**config_dict)
+        model = apply_sora(base_model, config)
+        adapter_state_dict = torch.load(os.path.join(adapter_path, "adapter_model.bin"), map_location=torch.device("cuda"))
+        set_sora_state_dict(model, adapter_state_dict)
+    else:
+        config = ABBAConfig(**config_dict)
+        model = apply_abba(base_model, config, adapter_name=adapter_name)
+        adapter_state_dict = torch.load(os.path.join(adapter_path, "adapter_model.bin"), map_location=torch.device("cuda"))
+        set_abba_adapter_state_dict(model, adapter_state_dict, adapter_name)
 
-    
     if model is None:
         raise ValueError("Failed to load the adapter model")
     
