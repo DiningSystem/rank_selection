@@ -10,17 +10,19 @@ Code for efficient fine-tuning experiments with **input-conditioned spectral LoR
 
 The evolve-LoRA adapter parameterizes the weight update as
 
-\[
+$$
 \Delta W(x) = U\,\mathrm{diag}(\lambda(x))\,V^T,
-\]
+$$
 
 where `U` and `V` are learned low-rank factors and the spectral coefficients `lambda(x)` are predicted from the input by a lightweight router. This makes the effective adapter rank **input-dependent** rather than fixed for every example.
 
-The current implementation uses a softmax router with a configurable gate floor:
+The current implementation uses a **standard softmax mixture-of-experts router**:
 
-\[
-\lambda(x) = g_{\min} + (1-g_{\min})\,\mathrm{softmax}(R(x)).
-\]
+$$
+\lambda(x) = \mathrm{softmax}(R(x)).
+$$
+
+In the current model-specific experiments, `evolve_gate_floor=0`, so there is **no gate floor or additive offset**. The router is simply `softmax(R(x))` over the `r_max` spectral components.
 
 The adapter is therefore dynamic at inference time and cannot be exactly merged into a single static weight matrix.
 
@@ -88,32 +90,37 @@ For offline/local-cache execution, add:
 
 ### Method
 
-For a base linear layer \(W\), evolve-LoRA keeps the base weights frozen and adds
+For a base linear layer `W`, evolve-LoRA keeps the base weights frozen and adds
 
-\[
+$$
 y = Wx + \left(xV \odot \lambda(x)\right)U^T \cdot \frac{\alpha}{r_{\max}},
-\]
+$$
 
 where:
 
-- `U ∈ R^{d_out × r_max}` is the output factor.
-- `V ∈ R^{d_in × r_max}` is the input factor.
+- `U ∈ R^(d_out × r_max)` is the output factor.
+- `V ∈ R^(d_in × r_max)` is the input factor.
 - `r_max` is the maximum adapter rank.
-- `lambda(x)` is produced by the input-conditioned router.
+- `lambda(x)` is produced by the input-conditioned softmax router.
 - `alpha / r_max` is the adapter scaling factor.
-- `gate_floor` prevents spectral coefficients from reaching zero.
 
-The router is a lightweight linear projection from the layer input to `r_max` spectral components. Router inputs can optionally be detached from the computation graph with `--evolve_no_detach_router` controlling this behavior.
+The router is a lightweight linear projection from the layer input to `r_max` spectral components followed by softmax. There is no hidden MLP in the current router implementation. Router inputs can optionally be detached from the computation graph with `--evolve_no_detach_router` controlling this behavior.
+
+The model-specific evolve-LoRA experiments use `--evolve_gate_floor 0`, giving exactly
+
+$$
+\lambda(x) = \mathrm{softmax}(R(x)).
+$$
 
 ### Rank statistics
 
 The implementation reports an entropy-based effective rank:
 
-\[
+$$
 r_{\mathrm{eff}} = \exp\left(-\sum_i p_i\log p_i\right),
-\]
+$$
 
-where the current implementation uses the spectral coefficients directly as `p_i`.
+where the current implementation uses the spectral coefficients directly as `p_i`. Because the current router is a softmax, these coefficients form a normalized distribution.
 
 It also records the number of active spectral components above `--evolve_active_component_threshold`. These metrics are logged under the `evolve/*` namespace in Weights & Biases.
 
@@ -121,9 +128,9 @@ It also records the number of active spectral components above `--evolve_active_
 
 The current `evolve_rank` implementation uses the **task loss only** for optimization:
 
-\[
+$$
 \mathcal{L} = \mathcal{L}_{task}.
-\]
+$$
 
 The rank, entropy, balance, and orthogonality utilities remain available in `evolve_lora.py` for experimentation, but the corresponding regularization terms are currently disabled in `EvolveLoRATrainer.compute_loss`. The reported effective rank and active-component statistics are monitoring metrics rather than optimization losses.
 
@@ -300,9 +307,9 @@ The main evolve-LoRA controls exposed by `train_arithmetic.py` include:
 | `--evolve_beta` | `0.05` | Rank/balance regularization coefficient; currently inactive |
 | `--evolve_alpha_max` | `0.01` | Maximum rank-pressure coefficient; currently inactive |
 | `--evolve_anneal_k` | `5e-5` | Rank-pressure annealing parameter; currently inactive |
-| `--evolve_gate_floor` | `0.05` | Minimum spectral gate value |
+| `--evolve_gate_floor` | `0.05` | Gate floor configuration; model-specific experiments set this to `0` |
 | `--evolve_complexity_ema` | `0.9` | EMA smoothing parameter for complexity tracking |
-| `--evolve_router_hidden_dim` | `64` | Router hidden dimension configuration |
+| `--evolve_router_hidden_dim` | `64` | Retained router hidden-dimension configuration; the current router itself is a single linear projection |
 | `--evolve_active_component_threshold` | `0.1` | Threshold used to count active spectral components |
 | `--evolve_active_log_max_layers` | `0` | Maximum number of layers logged individually; `0` logs all layers |
 | `--evolve_no_detach_router` | `false` | Allow router gradients through the router input |
@@ -312,6 +319,18 @@ The main evolve-LoRA controls exposed by `train_arithmetic.py` include:
 | `--lr` | `1e-4` | Learning rate |
 | `--warmup_ratio` | `0.02` | Warmup ratio |
 | `--max_seq_length` | `512` | Maximum sequence length |
+
+For the model-specific experiment launchers, the important router setting is:
+
+```bash
+--evolve_gate_floor 0
+```
+
+which gives the standard MoE-style softmax router
+
+$$
+\lambda(x) = \mathrm{softmax}(R(x)).
+$$
 
 ## Saving and loading adapters
 
@@ -365,6 +384,8 @@ If you use the original ABBA implementation, please cite:
 ## Notes
 
 - `evolve-LoRA` is **input-conditioned** and therefore cannot be represented by one static LoRA delta.
+- The current router is a standard softmax router: `softmax(R(x))`.
+- Model-specific experiments use `--evolve_gate_floor 0`; there is no gate-floor offset in those experiments.
 - Use `--backend hf` when loading a raw evolve-LoRA adapter.
 - The current trainer optimizes the task loss only; rank/entropy/balance/orthogonality code is retained for experimentation and logging.
 - The repository should be treated as an experimental research codebase; command-line defaults may change as the rank-selection experiments evolve.
