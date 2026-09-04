@@ -252,9 +252,7 @@ def arithmetic_test_hf(base_model, adapter_path, task, data_path, start=0, end=M
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                do_sample=True,
-                temperature=temperature,
-                top_p=top_p,
+                do_sample=False,
                 max_new_tokens=max_new_tokens,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id,

@@ -56,8 +56,8 @@ The repository also contains the original ABBA implementation and the existing a
 We recommend using a Conda environment:
 
 ```bash
-conda create -n abba python=3.10
-conda activate abba
+conda create -n lora python=3.10
+conda activate lora
 pip install -r requirements.txt
 ```
 
@@ -294,7 +294,7 @@ Do not pass `--adapter_path` with `--backend vllm`.
 
 ## Command-line options
 
-The main evolve-LoRA controls exposed by `train_arithmetic.py` include:
+The main evolve-LoRA controls exposed by `train_arithmetic.py` and `train_cr.py` include:
 
 | Argument | Default | Description |
 |---|---:|---|
@@ -302,14 +302,8 @@ The main evolve-LoRA controls exposed by `train_arithmetic.py` include:
 | `--lora_r` | `32` | Maximum evolve-LoRA rank |
 | `--lora_alpha` | `16` | Adapter scaling parameter |
 | `--lora_dropout` | `0` | Adapter dropout |
-| `--evolve_rank_delay_ratio` | `0.15` | Rank-regularization delay ratio; currently inactive in the task-only objective |
 | `--evolve_r_min` | `2` | Minimum target effective rank; currently retained as a configuration option |
-| `--evolve_beta` | `0.05` | Rank/balance regularization coefficient; currently inactive |
-| `--evolve_alpha_max` | `0.01` | Maximum rank-pressure coefficient; currently inactive |
-| `--evolve_anneal_k` | `5e-5` | Rank-pressure annealing parameter; currently inactive |
-| `--evolve_gate_floor` | `0.05` | Gate floor configuration; model-specific experiments set this to `0` |
-| `--evolve_complexity_ema` | `0.9` | EMA smoothing parameter for complexity tracking |
-| `--evolve_router_hidden_dim` | `64` | Retained router hidden-dimension configuration; the current router itself is a single linear projection |
+| `--evolve_alpha_max` | `0.01` | alpha for effective rank regularizer |
 | `--evolve_active_component_threshold` | `0.1` | Threshold used to count active spectral components |
 | `--evolve_active_log_max_layers` | `0` | Maximum number of layers logged individually; `0` logs all layers |
 | `--evolve_no_detach_router` | `false` | Allow router gradients through the router input |
