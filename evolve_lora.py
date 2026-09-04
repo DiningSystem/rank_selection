@@ -83,13 +83,13 @@ class SpectralLoRALayer(nn.Module):
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
         #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
         
-        #lambdas = torch.softmax(self.router(router_input), dim=-1)
-        lambdas = torch.full(
-            (*adapter_input.shape[:-1], self.r_max),
-            1.0 / self.r_max,
-            device=adapter_input.device,
-            dtype=self.adapter_dtype,
-        )
+        lambdas = torch.softmax(self.router(router_input), dim=-1)
+        # lambdas = torch.full(
+        #     (*adapter_input.shape[:-1], self.r_max),
+        #     1.0 / self.r_max,
+        #     device=adapter_input.device,
+        #     dtype=self.adapter_dtype,
+        # )
         self.last_router_probs = lambdas.float()
         U = self.U
         V = self.V
