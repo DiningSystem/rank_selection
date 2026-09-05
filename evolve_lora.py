@@ -67,8 +67,19 @@ class SpectralLoRALayer(nn.Module):
             full_matrices=False,
         )
 
-        U_init = U_svd[:, :self.r_max]
-        V_init = Vh_svd[:self.r_max, :].T
+        #U_init = U_svd[:, :self.r_max]
+        #V_init = Vh_svd[:self.r_max, :].T
+        
+
+        U_svd = U_svd[:, :r_max]
+        S_svd = S_svd[:r_max]
+        V_svd = Vh_svd[:r_max, :].T
+
+        S_sqrt = torch.sqrt(S_svd)
+
+        U_init = U_svd * S_sqrt.unsqueeze(0)
+        V_init = V_svd * S_sqrt.unsqueeze(0)
+
 
         #self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02) 
         #self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
