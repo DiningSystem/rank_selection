@@ -19,5 +19,5 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python train_cr.py \
   --scheduler linear \
   --warmup_ratio 0.02 \
   --max_seq_length 256 \
-  --seed 60 \
+  --seed 42 \
   --lr 1e-3
