@@ -35,6 +35,15 @@ def load_and_merge_adapter(base_model_name, adapter_path, output_path):
     # Load the adapter configuration
     with open(os.path.join(adapter_path, "adapter_config.json"), "r") as f:
         config_dict = json.load(f)
+
+    # Evolve-LoRA's spectral gate is a function of each layer input.  It has
+    # no single static weight delta, so producing a "merged" checkpoint would
+    # either fail or silently evaluate a different model in vLLM.
+    if "r_max" in config_dict:
+        raise ValueError(
+            "Evolve-LoRA adapters cannot be merged into a static model. "
+            "Evaluate them with the Hugging Face adapter evaluators instead."
+        )
     
     if "peft_type" in config_dict:
         model = PeftModel.from_pretrained(base_model, adapter_path)

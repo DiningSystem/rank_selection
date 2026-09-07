@@ -161,6 +161,13 @@ def commonsense_test_hf(base_model, adapter_path, dataset_name, data_path, start
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
+    if inference_mode == "rank":
+        print("Decoding: rank; changing --seed will not change results.")
+    elif temperature <= 0:
+        print("Decoding: greedy generation; changing --seed will not change results.")
+    else:
+        print(f"Decoding: sampled generation (seed={seed}, temperature={temperature}, top_p={top_p}, top_k={top_k}).")
+
     stop_token_ids = [tokenizer.eos_token_id]
     model_max_length = getattr(tokenizer, "model_max_length", None)
     if model_max_length is None or model_max_length > 100_000:

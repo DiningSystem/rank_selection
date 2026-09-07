@@ -7,6 +7,11 @@ BATCH_SIZE=${BATCH_SIZE:-128}
 TORCH_DTYPE=${TORCH_DTYPE:-"bfloat16"}
 DEVICE_MAP=${DEVICE_MAP:-"auto"}
 MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-32}
+SEED=${SEED:-42}
+# Use generate to match the legacy vLLM commonsense protocol.  ``rank`` is a
+# deterministic alternative, but it is a different metric and must not be
+# compared to vLLM generation scores.
+INFERENCE_MODE=${INFERENCE_MODE:-generate}
 
 if [[ $# -lt 1 ]]; then
   cat <<'USAGE' >&2
@@ -59,6 +64,8 @@ for RAW_RUN_DIR in "$@"; do
       --max_new_tokens "$MAX_NEW_TOKENS" \
       --torch_dtype "$TORCH_DTYPE" \
       --device_map "$DEVICE_MAP" \
+      --seed "$SEED" \
+      --inference_mode "$INFERENCE_MODE" \
       --run_dir "$LOG_RUN_DIR"
   done
 
@@ -66,6 +73,8 @@ for RAW_RUN_DIR in "$@"; do
 Run processed at: $(date)
 Base model: $MODEL
 Backend: Hugging Face adapter inference
+Inference mode: $INFERENCE_MODE
+Seed: $SEED
 Datasets: ${DATASETS[*]}
 EOF
   echo "=== Completed evolve-LoRA HF commonsense eval for $LOG_RUN_DIR ==="
