@@ -8,6 +8,7 @@ TORCH_DTYPE=${TORCH_DTYPE:-"bfloat16"}
 DEVICE_MAP=${DEVICE_MAP:-"auto"}
 GSM8K_MAX_NEW_TOKENS=${GSM8K_MAX_NEW_TOKENS:-256}
 MATH_MAX_NEW_TOKENS=${MATH_MAX_NEW_TOKENS:-512}
+SEED=${SEED:-150}
 
 if [[ $# -lt 1 ]]; then
   cat <<USAGE >&2
@@ -48,7 +49,7 @@ for RAW_RUN_DIR in "$@"; do
     --torch_dtype "$TORCH_DTYPE" \
     --device_map "$DEVICE_MAP" \
     --run_dir "$LOG_RUN_DIR" \
-    --seed 150
+    --seed "$SEED"
 
   CUDA_VISIBLE_DEVICES="$GPU_ID" python instruction_tuning_eval/arithmetic_eval_hf_evolve_lora.py \
     --base_model "$MODEL" \
@@ -60,12 +61,14 @@ for RAW_RUN_DIR in "$@"; do
     --torch_dtype "$TORCH_DTYPE" \
     --device_map "$DEVICE_MAP" \
     --run_dir "$LOG_RUN_DIR" \
-    --seed 150
+    --seed "$SEED"
 
   cat <<EOF > "$LOG_RUN_DIR/evolve_lora_hf_arithmetic_eval_info.txt"
 Run processed at: $(date)
 Base model: $MODEL
 Backend: Hugging Face adapter inference
+Decoding: greedy (seed does not affect results)
+Seed: $SEED
 Datasets: gsm8k math
 EOF
   echo "=== Completed evolve-LoRA HF arithmetic eval for $LOG_RUN_DIR ==="

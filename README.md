@@ -163,6 +163,13 @@ bash scripts/arithmetic_evolve_lora_hf_eval_Mistral7B.sh \\
 
 This evaluates GSM8K and MATH without attempting to merge the input-conditioned adapter.
 
+Arithmetic evaluation deliberately uses greedy decoding (`do_sample=False`), matching the
+legacy vLLM arithmetic evaluator. Consequently, changing `SEED` does **not** change an
+arithmetic result. A score gap between this direct HF evaluation and the old
+`*_merge_eval.sh` vLLM path is expected: evolve-LoRA gates are input-conditioned and a
+single merged static delta cannot reproduce them. Compare runs within the same backend;
+use the direct HF evaluator for raw evolve-LoRA adapters.
+
 ### Gemma 2 9B — arithmetic
 
 Training uses the dedicated Gemma launcher:
@@ -200,6 +207,9 @@ MODEL=meta-llama/Llama-3.2-1B \\
 ```
 
 The evaluation covers ARC-Challenge, ARC-Easy, BoolQ, HellaSwag, OpenBookQA, PIQA, Social IQa, and WinoGrande.
+It defaults to sampled generation with the legacy vLLM sampling parameters. Set `SEED` to
+reproduce an HF run; set `INFERENCE_MODE=rank` only for the deterministic label-ranking
+metric, not for comparison with the vLLM generation metric.
 
 ### Llama 3.2 3B — commonsense reasoning
 

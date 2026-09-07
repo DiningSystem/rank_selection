@@ -190,10 +190,13 @@ def load_evolve_lora_for_hf(
     # This happens only after all EvolveLoRA parameters exist
     # and have received their checkpoint weights.
     # ---------------------------------------------------------
-    model = model.to(
-        device="cuda:0",
-        dtype=dtype,
-    )
+    # The legacy CLI called this argument ``device_map`` and its default is
+    # ``auto``.  ``Tensor.to`` does not accept either ``auto`` or a device map,
+    # so normalize those values to the single-device placement this evaluator
+    # actually implements.
+    if device in (None, "auto", "cuda"):
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    model = model.to(device=device, dtype=dtype)
 
     # ---------------------------------------------------------
     # 9. Evaluation mode
@@ -236,6 +239,12 @@ def arithmetic_test_hf(base_model, adapter_path, task, data_path, start=0, end=M
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+    # This benchmark intentionally uses greedy decoding, just like the vLLM
+    # arithmetic evaluators.  Therefore different seeds must produce the same
+    # completions; the seed is retained only for deterministic model setup and
+    # for a consistent interface with sampled evaluations.
+    print("Decoding: greedy (do_sample=False); changing --seed will not change results.")
 
     model_max_length = getattr(tokenizer, "model_max_length", None)
     if model_max_length is None or model_max_length > 100_000:
