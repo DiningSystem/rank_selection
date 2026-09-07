@@ -275,6 +275,37 @@ def effective_rank(lambdas):
     entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=-1)
     return torch.exp(entropy)
 
+def router_js_diversity_loss(lambdas, eps=1e-8):
+    """
+    Encourage different inputs to have different routing distributions
+    using Jensen-Shannon divergence.
+
+    lambdas:
+        [N, r_max] or [B, T, r_max]
+    """
+    if lambdas.dim() == 3:
+        lambdas = lambdas.reshape(-1, lambdas.size(-1))
+
+    # Normalize routing weights
+    p = lambdas / (lambdas.sum(dim=-1, keepdim=True) + eps)
+    p = p.clamp_min(eps)
+
+    # Average routing distribution
+    q = p.mean(dim=0, keepdim=True)
+    q = q.clamp_min(eps)
+
+    # Mixture distribution
+    m = 0.5 * (p + q)
+
+    # JS(p || q)
+    kl_pm = (p * (torch.log(p) - torch.log(m))).sum(dim=-1)
+    kl_qm = (q * (torch.log(q) - torch.log(m))).sum(dim=-1)
+
+    js = 0.5 * (kl_pm + kl_qm)
+
+    # Maximize JS => minimize negative JS
+    return -js.mean()
+
 def routing_entropy(router_probs, eps=1e-8):
     p = router_probs / (router_probs.sum(dim=-1, keepdim=True) + 1e-8)
     entropy = -(p * torch.log(p + eps)).sum(dim=-1)
@@ -400,8 +431,9 @@ class EvolveLoRATrainer(Trainer):
         rank_delay_step = int(self.state.max_steps * cfg.evolve_rank_delay_ratio)
         alpha_t = rank_regularizer_weight(self.state.global_step, rank_delay_step, cfg.alpha_max)
         rank_reg = erank.mean()
+        diversity = router_js_diversity_loss(lambdas=lambdas.float())
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
-        loss = task_loss.float() + alpha_t * ((rank_reg-1)/(cfg.r_max-1))   #+ \
+        loss = task_loss.float() + alpha_t * diversity#((rank_reg-1)/(cfg.r_max-1))   #+ \
             #cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
         if model.training:
             logs = {"evolve/erank": rank_reg.detach().item(), "loss": task_loss.float(), "total_loss": loss}
