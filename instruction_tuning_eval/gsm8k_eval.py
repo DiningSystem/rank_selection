@@ -103,7 +103,7 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
     stop_tokens = ["Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=256, stop=stop_tokens)
     print('sampling =====', sampling_params)
-    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size)
+    llm = LLM(model=model, tensor_parallel_size=tensor_parallel_size, gpu_memory_utilization=0.8)
     res_completions = []
     result = []
 
