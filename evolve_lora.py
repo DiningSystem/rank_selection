@@ -13,6 +13,7 @@ from transformers import Trainer, TrainerCallback
 @dataclass
 class EvolveLoRAConfig:
     r_max: int = 32
+    shared_rank: int = 8
     r_min: int = 2
     evolve_rank_delay_ratio: float = 0.15
     alpha: float = 16.0
@@ -35,20 +36,37 @@ class EvolveLoRAConfig:
     def __post_init__(self):
         if self.target_modules is None:
             raise ValueError("target_modules cannot be None")
+        if not 0 <= self.shared_rank < self.r_max:
+            raise ValueError("shared_rank must be non-negative and smaller than r_max")
+
+    @property
+    def routed_rank(self) -> int:
+        """Number of input-routed spectral directions."""
+        return self.r_max - self.shared_rank
 
 
 class SpectralLoRALayer(nn.Module):
-    """Input-conditioned spectral LoRA: ΔW(x)=U diag(lambda(x)) V^T."""
+    """Shared plus input-routed spectral LoRA.
+
+    The shared adapter is ``U_s diag(lambda_s) V_s^T`` and is active for
+    every input.  The routed adapter is ``U_r diag(lambda_r(x)) V_r^T``.
+    Neither factor is constrained to be orthogonal.
+    """
 
     def __init__(self, base_layer: nn.Module, r_max: int = 32, alpha: float = 16.0,
                  dropout: float = 0.0, gate_floor: float = 0.05,
-                 detach_router_input: bool = True, router_hidden_dim: int = 64):
+                 detach_router_input: bool = True, router_hidden_dim: int = 64,
+                 shared_rank: int = 8):
         super().__init__()
         if not hasattr(base_layer, "weight"):
             raise ValueError("Layer doesn't have a weight attribute")
         self.base_layer = base_layer
         self.out_features, self.in_features = base_layer.weight.shape
         self.r_max = r_max
+        if not 0 <= shared_rank < r_max:
+            raise ValueError("shared_rank must be non-negative and smaller than r_max")
+        self.shared_rank = shared_rank
+        self.routed_rank = r_max - shared_rank
         self.alpha = alpha
         self.scaling = alpha / max(r_max, 1)
         self.gate_floor = gate_floor
@@ -67,8 +85,13 @@ class SpectralLoRALayer(nn.Module):
             full_matrices=False,
         )
 
-        U_init = U_svd[:, :self.r_max]
-        V_init = Vh_svd[:self.r_max, :].T
+        # Pad when a requested adapter rank exceeds the matrix rank.  This
+        # keeps adapters usable for small Linear layers as well as LLM layers.
+        U_init = torch.zeros(self.out_features, self.r_max, device=W0.device, dtype=W0.dtype)
+        V_init = torch.zeros(self.in_features, self.r_max, device=W0.device, dtype=W0.dtype)
+        available_rank = min(self.r_max, S_svd.numel())
+        U_init[:, :available_rank] = U_svd[:, :available_rank]
+        V_init[:, :available_rank] = Vh_svd[:available_rank, :].T
         
 
         # U_svd = U_svd[:, :r_max]
@@ -83,55 +106,52 @@ class SpectralLoRALayer(nn.Module):
 
         #self.U = nn.Parameter(torch.randn(self.out_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02) 
         #self.V = nn.Parameter(torch.randn(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype) * 0.02)
-        self.U = nn.Parameter(
-            U_init.to(
+        self.U_shared = nn.Parameter(
+            U_init[:, :self.shared_rank].to(
                 device=adapter_device,
                 dtype=self.adapter_dtype,
             )
         )
-
-        self.V = nn.Parameter(
-            V_init.to(
+        self.V_shared = nn.Parameter(
+            V_init[:, :self.shared_rank].to(
                 device=adapter_device,
                 dtype=self.adapter_dtype,
             )
         )
+        self.U_routed = nn.Parameter(U_init[:, self.shared_rank:].to(device=adapter_device, dtype=self.adapter_dtype))
+        self.V_routed = nn.Parameter(V_init[:, self.shared_rank:].to(device=adapter_device, dtype=self.adapter_dtype))
+        # These coefficients are deliberately independent of x, unlike the
+        # routed lambda values below.
+        self.shared_lambdas = nn.Parameter(torch.ones(self.shared_rank, device=adapter_device, dtype=self.adapter_dtype))
 
         self.router = nn.Sequential(
             #nn.Linear(self.in_features, hidden_dim, device=adapter_device, dtype=self.adapter_dtype),
             #nn.GELU(),
-            nn.Linear(self.in_features, r_max, device=adapter_device, dtype=self.adapter_dtype),
+            nn.Linear(self.in_features, self.routed_rank, device=adapter_device, dtype=self.adapter_dtype),
         )
         self.dropout = nn.Dropout(dropout)
         self.merged = False
         self.disable_adapters = False
         self.last_lambdas = None
+        self.last_router_probs = None
 
     def forward(self, x):
         y = self.base_layer(x)
         if self.disable_adapters or self.merged:
             self.last_lambdas = None
             return y
-        #adapter_dtype = self.U.dtype
         adapter_input = x.to(self.adapter_dtype)
         router_input = adapter_input.detach() if self.detach_router_input else adapter_input
-        #lambdas = self.gate_floor + (1.0 - self.gate_floor) * torch.sigmoid(self.router(router_input))
-        
-        lambdas = torch.softmax(self.router(router_input), dim=-1)
-        # lambdas = torch.full(
-        #     (*adapter_input.shape[:-1], self.r_max),
-        #     1.0 / self.r_max,
-        #     device=adapter_input.device,
-        #     dtype=self.adapter_dtype,
-        # )
-        self.last_router_probs = lambdas.float()
-        U = self.U
-        V = self.V
-        #lambdas = lambdas * self.r_max
-        self.last_lambdas = lambdas.float()
         dropped = self.dropout(adapter_input)
-        spectral = (dropped @ V) * lambdas
-        adapter_out = (spectral @ U.t()) * self.scaling
+        shared_spectral = (dropped @ self.V_shared) * self.shared_lambdas
+        shared_out = shared_spectral @ self.U_shared.t()
+        routed_lambdas = torch.softmax(self.router(router_input), dim=-1)
+        self.last_router_probs = routed_lambdas.float()
+        # All routing/rank metrics intentionally apply only to routed experts.
+        self.last_lambdas = routed_lambdas.float()
+        routed_spectral = (dropped @ self.V_routed) * routed_lambdas
+        routed_out = routed_spectral @ self.U_routed.t()
+        adapter_out = (shared_out + routed_out) * self.scaling
         return y + adapter_out.to(y.dtype)
 
     def merge(self):
@@ -208,8 +228,11 @@ def mark_only_evolve_lora_as_trainable(self):
         param.requires_grad = False
     for module in self.modules():
         if isinstance(module, SpectralLoRALayer):
-            module.U.requires_grad = True
-            module.V.requires_grad = True
+            module.U_shared.requires_grad = True
+            module.V_shared.requires_grad = True
+            module.U_routed.requires_grad = True
+            module.V_routed.requires_grad = True
+            module.shared_lambdas.requires_grad = True
             for param in module.router.parameters():
                 param.requires_grad = True
 
@@ -222,8 +245,11 @@ def save_pretrained(self, save_directory, **kwargs):
     state = {}
     for name, module in self.named_modules():
         if isinstance(module, SpectralLoRALayer):
-            state[f"{name}.U"] = module.U.detach().cpu()
-            state[f"{name}.V"] = module.V.detach().cpu()
+            state[f"{name}.U_shared"] = module.U_shared.detach().cpu()
+            state[f"{name}.V_shared"] = module.V_shared.detach().cpu()
+            state[f"{name}.shared_lambdas"] = module.shared_lambdas.detach().cpu()
+            state[f"{name}.U_routed"] = module.U_routed.detach().cpu()
+            state[f"{name}.V_routed"] = module.V_routed.detach().cpu()
             for i, layer in enumerate(module.router):
                 if hasattr(layer, "state_dict"):
                     for k, v in layer.state_dict().items():
@@ -244,7 +270,7 @@ def apply_evolve_lora(model, config: EvolveLoRAConfig):
                     parent = getattr(parent, part)
             setattr(parent, target_name, SpectralLoRALayer(module, config.r_max, config.alpha, config.dropout,
                                                           config.gate_floor, config.detach_router_input,
-                                                          config.router_hidden_dim))
+                                                          config.router_hidden_dim, config.shared_rank))
             model.evolve_lora_layers.add(name)
     model.mark_only_evolve_lora_as_trainable = types.MethodType(mark_only_evolve_lora_as_trainable, model)
     model.save_pretrained = types.MethodType(save_pretrained, model)
@@ -255,10 +281,11 @@ def apply_evolve_lora(model, config: EvolveLoRAConfig):
 def set_evolve_lora_state_dict(model, adapter_state_dict: Dict[str, torch.Tensor]):
     for name, module in model.named_modules():
         if isinstance(module, SpectralLoRALayer):
-            if f"{name}.U" in adapter_state_dict:
-                module.U.data.copy_(adapter_state_dict[f"{name}.U"].to(module.U.device, module.U.dtype))
-            if f"{name}.V" in adapter_state_dict:
-                module.V.data.copy_(adapter_state_dict[f"{name}.V"].to(module.V.device, module.V.dtype))
+            for parameter_name in ("U_shared", "V_shared", "shared_lambdas", "U_routed", "V_routed"):
+                key = f"{name}.{parameter_name}"
+                parameter = getattr(module, parameter_name)
+                if key in adapter_state_dict:
+                    parameter.data.copy_(adapter_state_dict[key].to(parameter.device, parameter.dtype))
             prefix = f"{name}.router."
             for i, layer in enumerate(module.router):
                 params = list(layer.parameters())
@@ -281,7 +308,7 @@ def router_js_diversity_loss(lambdas, eps=1e-8):
     using Jensen-Shannon divergence.
 
     lambdas:
-        [N, r_max] or [B, T, r_max]
+        [N, routed_rank] or [B, T, routed_rank]
     """
     if lambdas.dim() == 3:
         lambdas = lambdas.reshape(-1, lambdas.size(-1))
@@ -381,7 +408,7 @@ class EvolveLoRATrainer(Trainer):
         self.log(logs)
 
     def _collect_lambdas(self):
-        vals = [m.last_lambdas.reshape(-1, m.r_max) for m in self.model.modules()
+        vals = [m.last_lambdas.reshape(-1, m.routed_rank) for m in self.model.modules()
                 if isinstance(m, SpectralLoRALayer) and m.last_lambdas is not None]
         return torch.cat(vals, dim=0) if vals else None
 
@@ -436,7 +463,16 @@ class EvolveLoRATrainer(Trainer):
         loss = task_loss.float() + alpha_t * diversity#((rank_reg-1)/(cfg.r_max-1))   #+ \
             #cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
         if model.training:
-            logs = {"evolve/erank": rank_reg.detach().item(), "loss": task_loss.float(), "total_loss": loss}
+            logs = {
+                # Retain the old key for existing dashboards; it now has the
+                # explicitly routed-only meaning documented by the new key.
+                "evolve/erank": rank_reg.detach().item(),
+                "evolve/routed_effective_rank": rank_reg.detach().item(),
+                "evolve/shared_rank": float(cfg.shared_rank),
+                "evolve/routed_rank": float(cfg.routed_rank),
+                "loss": task_loss.float(),
+                "total_loss": loss,
+            }
             logs.update(self._active_component_logs(model))
             self._accumulate_evolve_logs(logs)
         return (loss, outputs) if return_outputs else loss

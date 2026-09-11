@@ -92,18 +92,20 @@ For offline/local-cache execution, add:
 For a base linear layer `W`, evolve-LoRA keeps the base weights frozen and adds
 
 $$
-y = Wx + \left(xV \odot \lambda(x)\right)U^T \cdot \frac{\alpha}{r_{\max}},
+\Delta W(x) = U_s\operatorname{diag}(\lambda_s)V_s^T + U_r\operatorname{diag}(\lambda_r(x))V_r^T,
 $$
 
-where:
+where `U_s, V_s` are free learned shared factors with input-independent learned
+coefficients `lambda_s`, and `U_r, V_r` are free learned routed factors. The
+always-active shared rank is `--evolve_shared_rank` (default `8`), while
+`routed_rank = r_max - shared_rank`. The adapter output is scaled by
+`alpha / r_max`.
 
-- `U ∈ R^(d_out × r_max)` is the output factor.
-- `V ∈ R^(d_in × r_max)` is the input factor.
-- `r_max` is the maximum adapter rank.
-- `lambda(x)` is produced by the input-conditioned softmax router.
-- `alpha / r_max` is the adapter scaling factor.
-
-The router is a lightweight linear projection from the layer input to `r_max` spectral components followed by softmax. There is no hidden MLP in the current router implementation. Router inputs can optionally be detached from the computation graph with `--evolve_no_detach_router` controlling this behavior.
+The router is a lightweight linear projection from the layer input to
+`routed_rank` spectral components followed by softmax. There is no hidden MLP
+in the current router implementation. Router inputs can optionally be detached
+from the computation graph with `--evolve_no_detach_router` controlling this
+behavior.
 
 The model-specific evolve-LoRA experiments use `--evolve_gate_floor 0`, giving exactly
 
@@ -119,9 +121,9 @@ $$
 r_{\mathrm{eff}} = \exp\left(-\sum_i p_i\log p_i\right),
 $$
 
-where the current implementation uses the spectral coefficients directly as `p_i`. Because the current router is a softmax, these coefficients form a normalized distribution.
+where the current implementation uses **routed** spectral coefficients directly as `p_i`. Because the router is a softmax, these coefficients form a normalized distribution.
 
-It also records the number of active spectral components above `--evolve_active_component_threshold`. These metrics are logged under the `evolve/*` namespace in Weights & Biases.
+It also records the number of active routed components above `--evolve_active_component_threshold`, together with shared rank, routed rank, and routed effective rank. These metrics are logged under the `evolve/*` namespace in Weights & Biases.
 
 ### Current loss behavior
 
@@ -308,7 +310,8 @@ The main evolve-LoRA controls exposed by `train_arithmetic.py` and `train_cr.py`
 | Argument | Default | Description |
 |---|---:|---|
 | `--adapter_type` | `abba` | Adapter type; use `evolve_lora` for evolve-LoRA |
-| `--lora_r` | `32` | Maximum evolve-LoRA rank |
+| `--lora_r` | `32` | Total evolve-LoRA rank (`shared_rank + routed_rank`) |
+| `--evolve_shared_rank` | `8` | Always-active shared rank; router uses `lora_r - evolve_shared_rank` directions |
 | `--lora_alpha` | `16` | Adapter scaling parameter |
 | `--lora_dropout` | `0` | Adapter dropout |
 | `--evolve_r_min` | `2` | Minimum target effective rank; currently retained as a configuration option |
