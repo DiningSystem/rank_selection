@@ -460,7 +460,7 @@ class EvolveLoRATrainer(Trainer):
         rank_reg = erank.mean()
         diversity = router_js_diversity_loss(lambdas=lambdas.float())
         #ent_loss = entropy_floor_loss(lambdas.float(), 0.35).mean()
-        loss = task_loss.float() + alpha_t * diversity#((rank_reg-1)/(cfg.r_max-1))   #+ \
+        loss = task_loss.float() #+ alpha_t * diversity#((rank_reg-1)/(cfg.r_max-1))   #+ \
             #cfg.ortho_weight * orth_loss #+ cfg.beta * balance_loss
         if model.training:
             logs = {
