@@ -198,6 +198,7 @@ from sora import SoRAConfig, apply_sora
 def create_peft_model_it_evolve_lora(model, args):
     config = EvolveLoRAConfig(
         r_max=args.lora_r,
+        shared_rank=args.evolve_shared_rank,
         r_min=args.evolve_r_min,
         alpha=args.lora_alpha,
         dropout=args.lora_dropout,

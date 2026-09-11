@@ -187,6 +187,7 @@ if __name__ == "__main__":
     parser.add_argument("--adapter_type", type=str, default="abba", choices=["abba", "evolve_lora", "lora", "adalora", "sora"], help="Adapter implementation to train")
     parser.add_argument("--evolve_rank_delay_ratio", type=float, default=0.15, help="Delay rank ratio before training")
     parser.add_argument("--evolve_r_min", type=int, default=2, help="Minimum target effective rank for evolve-LoRA")
+    parser.add_argument("--evolve_shared_rank", type=int, default=8, help="Always-active shared rank for evolve-LoRA; routed rank is lora_r minus this value")
     parser.add_argument("--evolve_beta", type=float, default=0.05, help="Information-conditioned rank consistency weight")
     parser.add_argument("--evolve_alpha_max", type=float, default=0.01, help="Maximum temporal effective-rank pressure")
     parser.add_argument("--evolve_anneal_k", type=float, default=5e-5, help="Temporal rank-pressure annealing rate")
